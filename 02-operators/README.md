@@ -12,7 +12,7 @@ The required operators differ by platform. Operator installation is documented i
 
 | Platform | Guide |
 |----------|-------|
-| OpenShift Container Platform | [llm-d-playbook](https://github.com/llm-d/llm-d-playbook) |
+| OpenShift Container Platform | [llm-d-playbook](https://github.com/rh-aiservices-bu/llm-d-playbook/) |
 | Managed Kubernetes (AKS / CKS) | [Deploying Red Hat AI Inference Server on Managed Kubernetes](https://opendatahub-io.github.io/rhaii-on-xks/deploying-llm-d-on-managed-kubernetes/) |
 
 ## Component Comparison
