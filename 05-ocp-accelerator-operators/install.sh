@@ -139,16 +139,16 @@ if [ "$PLATFORM" = "bare-metal-ib" ] || [ "$PLATFORM" = "bare-metal-roce" ]; the
   echo ""
 fi
 
-# Step 12: SR-IOV VF config (RoCE only)
-if [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "12-sriov-vf-config" "$SCRIPT_DIR/12-sriov-vf-config/base"
-fi
-
-# Step 13: NIC discovery (bare metal only)
+# Step 12: NIC discovery (bare metal only)
 if [ "$PLATFORM" = "bare-metal-ib" ] || [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "13-nic-discovery" "$SCRIPT_DIR/13-nic-discovery/base"
+  apply_step "12-nic-discovery" "$SCRIPT_DIR/12-nic-discovery/base"
   echo "  Waiting for discovery DaemonSet to complete..."
   sleep 60
+fi
+
+# Step 13: SR-IOV VF config (RoCE only — requires Step 12 discovery data)
+if [ "$PLATFORM" = "bare-metal-roce" ]; then
+  apply_step "13-sriov-vf-config" "$SCRIPT_DIR/13-sriov-vf-config/base"
 fi
 
 # Step 14: NVIDIA network operator config
@@ -169,7 +169,7 @@ fi
 # Step 20: Wait for operator readiness
 apply_step "20-operators-gpu-readiness" "$SCRIPT_DIR/20-operators-gpu-readiness/base"
 echo "  Waiting for readiness jobs to complete..."
-oc wait --for=condition=complete job/wait-for-network-operator-ready -n default --timeout=1800s 2>/dev/null || true
+oc wait --for=condition=complete job/wait-for-network-operator-ready -n llm-d-setup --timeout=1800s 2>/dev/null || true
 oc wait --for=condition=complete job/wait-for-mofed-ready -n nvidia-network-operator --timeout=1800s 2>/dev/null || true
 
 # Step 21: Deploy GPU operands

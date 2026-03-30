@@ -6,17 +6,17 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: llm-d-playbooks
   annotations:
-    argocd.argoproj.io/sync-wave: "13"
+    argocd.argoproj.io/sync-wave: "12"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   destination:
-    namespace: default
+    namespace: llm-d-setup
     server: "https://kubernetes.default.svc"
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/13-nic-discovery/base
+    path: 05-ocp-accelerator-operators/12-nic-discovery/base
   project: default
   syncPolicy:
     automated:

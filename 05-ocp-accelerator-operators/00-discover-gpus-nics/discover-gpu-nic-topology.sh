@@ -107,6 +107,8 @@ HAS_VF=false
 HAS_GPU=false
 IS_VM=false
 ALL_GPU_MODELS=""
+COUNT_IB=0
+COUNT_ROCE=0
 
 for NODE in $WORKER_NODES; do
   echo "--- Node: $NODE ---"
@@ -185,8 +187,8 @@ for NODE in $WORKER_NODES; do
     "
   ' 2>&1 | grep -v "^Starting pod" | grep -v "^Removing debug pod" | grep -v "^To use host binaries" | grep -v "^E[0-9]" > "$PROBE_DIR/${NODE}-raw.txt" || true
 
-  # --- Parse and display NIC results ---
-  nic_lines=$(sed -n '/^---NIC_START---$/,/^---NIC_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^NIC|" || true)
+  # --- Parse and display NIC results (sorted by NUMA, then PCI address) ---
+  nic_lines=$(sed -n '/^---NIC_START---$/,/^---NIC_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^NIC|" | sort -t'|' -k8,8n -k3,3 || true)
   if [ -n "$nic_lines" ]; then
     echo ""
     echo "  NICs:"
@@ -194,8 +196,8 @@ for NODE in $WORKER_NODES; do
     while IFS='|' read -r _ ifname pci link_layer sriov_capable sriov_totalvfs carrier numa rdma_dev device_id is_vf netdev; do
       if [ "$carrier" = "1" ]; then state="up"; else state="down"; fi
       echo "  $(printf '%-10s %-14s %-12s %-6s %-5s %-7s %-12s %s' "$rdma_dev" "$pci" "$link_layer" "$numa" "$is_vf" "$carrier" "$netdev" "$state")"
-      if [ "$link_layer" = "InfiniBand" ]; then HAS_IB=true; fi
-      if [ "$link_layer" = "Ethernet" ]; then HAS_ROCE=true; fi
+      if [ "$link_layer" = "InfiniBand" ]; then HAS_IB=true; COUNT_IB=$((COUNT_IB + 1)); fi
+      if [ "$link_layer" = "Ethernet" ]; then HAS_ROCE=true; COUNT_ROCE=$((COUNT_ROCE + 1)); fi
       if [ "$is_vf" = "true" ]; then HAS_VF=true; fi
     done <<< "$nic_lines"
   else
@@ -286,7 +288,9 @@ for NODE in $WORKER_NODES; do
 
   if [ -n "$nic_lines" ]; then
     while IFS='|' read -r _ ifname pci link_layer sriov_capable sriov_totalvfs carrier numa rdma_dev device_id is_vf netdev; do
-      echo "$rdma_dev($netdev)" >> "${numa_tmp}-nic-${numa}"
+      ll_tag="RoCE"
+      [ "$link_layer" = "InfiniBand" ] && ll_tag="IB"
+      echo "$pci $rdma_dev($netdev,$ll_tag)" >> "${numa_tmp}-nic-${numa}"
     done <<< "$nic_lines"
   fi
 
@@ -300,7 +304,7 @@ for NODE in $WORKER_NODES; do
       echo "      GPUs: $(tr '\n' ' ' < "${numa_tmp}-gpu-${n}")"
     fi
     if [ -f "${numa_tmp}-nic-${n}" ]; then
-      echo "      NICs: $(tr '\n' ' ' < "${numa_tmp}-nic-${n}")"
+      echo "      NICs: $(sort "${numa_tmp}-nic-${n}" | sed 's/^[^ ]* //' | tr '\n' ' ')"
     fi
   done
 
@@ -313,8 +317,8 @@ echo "=========================================="
 echo "Summary"
 echo "=========================================="
 echo ""
-echo "  InfiniBand detected: $HAS_IB"
-echo "  RoCE detected:       $HAS_ROCE"
+echo "  InfiniBand ports:    $COUNT_IB"
+echo "  Ethernet/RoCE ports: $COUNT_ROCE"
 echo "  NICs are VFs:        $HAS_VF"
 echo "  NVIDIA GPUs:         $HAS_GPU"
 echo "  Virtual machine:     $IS_VM"
@@ -343,13 +347,23 @@ elif [ "$HAS_IB" = true ] && [ "$HAS_ROCE" = false ]; then
   echo "  Your cluster has InfiniBand NICs on physical functions."
   echo "  Use: ./05-ocp-accelerator-operators/install.sh --platform bare-metal-ib"
 elif [ "$HAS_IB" = true ] && [ "$HAS_ROCE" = true ]; then
-  echo "  -> bare-metal-ib  (likely — mixed link layers detected)"
+  if [ "$COUNT_ROCE" -gt "$COUNT_IB" ]; then
+    echo "  -> bare-metal-roce  (likely — see note below)"
+  else
+    echo "  -> bare-metal-ib  (likely — see note below)"
+  fi
   echo ""
-  echo "  Your cluster has both InfiniBand and Ethernet-mode RDMA ports."
-  echo "  This is common with dual-port ConnectX cards where one port is IB"
-  echo "  and the other is Ethernet (management/storage). If RDMA traffic uses"
-  echo "  InfiniBand, use bare-metal-ib. If your RDMA fabric is RoCE, use"
-  echo "  bare-metal-roce."
+  echo "  Mixed link layers detected: $COUNT_IB InfiniBand + $COUNT_ROCE Ethernet/RoCE."
+  echo ""
+  echo "  On multi-GPU systems (B200, H100 SXM, etc.) a small number of IB ports"
+  echo "  may be internal NVLink/NVSwitch fabric — not part of your RDMA network."
+  echo "  Check which ports carry your workload RDMA traffic:"
+  echo "    - If RDMA runs over Ethernet (RoCE): use bare-metal-roce"
+  echo "    - If RDMA runs over InfiniBand:      use bare-metal-ib"
+  echo ""
+  echo "  Tip: look at the NUMA topology above. If the IB ports are all on one PCI"
+  echo "  slot (same base address) they are likely a single multi-port device for"
+  echo "  internal GPU interconnect, not your external RDMA fabric."
 elif [ "$HAS_ROCE" = true ]; then
   echo "  -> bare-metal-roce"
   echo ""

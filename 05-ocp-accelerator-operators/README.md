@@ -108,14 +108,29 @@ Recommended Platform Overlay
 
 Install NFD, NVIDIA GPU Operator, and NVIDIA Network Operator via OLM.
 
+> **Re-installing?** OLM allows only one OperatorGroup per namespace. If these
+> operators were previously installed, stale OperatorGroups will block new
+> subscriptions. Clean them up first:
+>
+> ```bash
+> for ns in openshift-nfd nvidia-gpu-operator nvidia-network-operator; do
+>   oc get operatorgroup -n "$ns" -o name 2>/dev/null | while read og; do
+>     echo "Deleting $og in $ns"
+>     oc delete "$og" -n "$ns"
+>   done
+> done
+> ```
+
 ```bash
 oc apply -k 05-ocp-accelerator-operators/01-operators-nfd-gpu/base/
 ```
 
-To check:
+To check (CSVs may take a minute or two to appear):
 
 ```bash
-oc get subscriptions -A | grep -E 'nfd|gpu|nvidia-network'
+oc get operatorgroup -n openshift-nfd
+oc get operatorgroup -n nvidia-gpu-operator
+oc get operatorgroup -n nvidia-network-operator
 oc get csv -n openshift-nfd
 oc get csv -n nvidia-gpu-operator
 oc get csv -n nvidia-network-operator
@@ -152,6 +167,14 @@ oc get nodes -l feature.node.kubernetes.io/pci-15b3.present=true
 
 Install the SR-IOV Network Operator for RoCE VF management.
 
+> **Re-installing?** Clean up stale OperatorGroups first (same issue as Step 01):
+>
+> ```bash
+> oc get operatorgroup -n openshift-sriov-network-operator -o name 2>/dev/null | while read og; do
+>   echo "Deleting $og"; oc delete "$og" -n openshift-sriov-network-operator
+> done
+> ```
+
 ```bash
 oc apply -k 05-ocp-accelerator-operators/10-sriov-operator/base/
 ```
@@ -159,19 +182,23 @@ oc apply -k 05-ocp-accelerator-operators/10-sriov-operator/base/
 To check:
 
 ```bash
+oc get operatorgroup -n openshift-sriov-network-operator
 oc get csv -n openshift-sriov-network-operator
 oc get pods -n openshift-sriov-network-operator
 ```
 
-### Step 11: IB Interface Normalization
+### Step 11: IB Interface Normalization (optional)
 
 | Platform | Action | Why |
 |----------|--------|-----|
-| bare-metal-ib | apply | Consistent NIC names across nodes |
-| bare-metal-roce | apply | Consistent NIC names across nodes |
+| bare-metal-ib | optional | Cosmetic — operators use PCI addresses, not interface names |
+| bare-metal-roce | optional | Cosmetic — operators use PCI addresses, not interface names |
 | ibm-cloud | **skip** | Cloud NICs have stable names from the hypervisor |
 
-Generate udev rules for consistent RDMA interface naming (`ib_nic0`, `ib_nic1`, ...) via a MachineConfig. **This triggers worker node reboots.**
+Renames RDMA interfaces to consistent names (`ib_nic0`, `ib_nic1`, ...) via udev
+rules in a MachineConfig. This makes interface names identical across nodes with
+matching hardware. **Triggers worker node reboots.** Safe to skip — no downstream
+steps depend on these names; operators and SR-IOV policies reference PCI addresses.
 
 ```bash
 oc apply -k 05-ocp-accelerator-operators/11-ib-interface-normalization/base/
@@ -180,52 +207,53 @@ oc apply -k 05-ocp-accelerator-operators/11-ib-interface-normalization/base/
 To check:
 
 ```bash
-oc logs job/generate-ib-udev-rules -n default -f
+oc logs job/generate-ib-udev-rules -n llm-d-setup -f
 oc get mcp worker -w
 ```
 
-### Step 12: SR-IOV VF Config
+### Step 12: NIC Discovery
+
+| Platform | Action | Why |
+|----------|--------|-----|
+| bare-metal-ib | apply | Feeds NIC data to Network Operator and SR-IOV config |
+| bare-metal-roce | apply | Feeds NIC data to Network Operator and SR-IOV config |
+| ibm-cloud | **skip** | NIC topology is known from the cloud provider |
+
+DaemonSet that discovers RDMA-capable NICs on every node — PCI addresses, device IDs, link type (IB vs RoCE), carrier status. Results are written to `/var/lib/nic-discovery/` on each node and are consumed by Step 13.
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/12-nic-discovery/base/
+```
+
+To check:
+
+```bash
+oc get pods -n llm-d-setup -l app=nic-port-discovery -o wide
+
+oc exec -n llm-d-setup $(oc get pods -n llm-d-setup -l app=nic-port-discovery -o name | head -1) \
+  -c pause -- cat /discovery/ports.json
+```
+
+### Step 13: SR-IOV VF Config
 
 | Platform | Action | Why |
 |----------|--------|-----|
 | bare-metal-ib | **skip** | IB doesn't use SR-IOV (see step 10) |
-| bare-metal-roce | apply | Configures VF policies from discovered hardware |
+| bare-metal-roce | apply | Generates VF policies from Step 12 discovery data |
 | ibm-cloud | **skip** | NICs are already VFs from the hypervisor |
 
-Generate `SriovNetworkNodePolicy` and `SriovNetwork` resources from discovered hardware.
+Job that reads discovery data from Step 12, then generates and applies `SriovNetworkNodePolicy` and `SriovNetwork` resources.
 
 ```bash
-oc apply -k 05-ocp-accelerator-operators/12-sriov-vf-config/base/
+oc apply -k 05-ocp-accelerator-operators/13-sriov-vf-config/base/
 ```
 
 To check:
 
 ```bash
+oc logs job/nic-resource-generator -n llm-d-setup -f
 oc get sriovnetworknodepolicy -n openshift-sriov-network-operator
 oc get sriovnetwork -n openshift-sriov-network-operator
-```
-
-### Step 13: NIC Discovery
-
-| Platform | Action | Why |
-|----------|--------|-----|
-| bare-metal-ib | apply | Feeds NIC data to Network Operator config |
-| bare-metal-roce | apply | Feeds NIC data to Network Operator config |
-| ibm-cloud | **skip** | NIC topology is known from the cloud provider |
-
-DaemonSet that discovers RDMA-capable NICs on every node -- PCI addresses, device IDs, link type (IB vs RoCE), carrier status. Results are written to `/var/lib/nic-discovery/` on each node.
-
-```bash
-oc apply -k 05-ocp-accelerator-operators/13-nic-discovery/base/
-```
-
-To check:
-
-```bash
-oc get pods -l app=nic-port-discovery -o wide
-
-oc exec -n default $(oc get pods -l app=nic-port-discovery -o name | head -1) \
-  -c pause -- cat /discovery/ports.json
 ```
 
 ### Step 14: NVIDIA Network Operator Config
@@ -299,7 +327,7 @@ oc apply -k 05-ocp-accelerator-operators/20-operators-gpu-readiness/base/
 To check:
 
 ```bash
-oc logs job/wait-for-network-operator-ready -n default -f
+oc logs job/wait-for-network-operator-ready -n llm-d-setup -f
 oc logs job/wait-for-mofed-ready -n nvidia-network-operator -f
 ```
 

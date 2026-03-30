@@ -11,7 +11,7 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   destination:
-    namespace: default
+    namespace: llm-d-setup
     server: "https://kubernetes.default.svc"
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git

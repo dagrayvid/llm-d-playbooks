@@ -4,6 +4,7 @@ metadata:
   name: nvidia-network-operator
   namespace: nvidia-network-operator
 spec:
+  channel: v25.1
   name: nvidia-network-operator
   source: certified-operators
   sourceNamespace: openshift-marketplace

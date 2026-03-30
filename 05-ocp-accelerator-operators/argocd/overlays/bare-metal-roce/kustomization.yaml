@@ -12,7 +12,7 @@ resources:
   - ../../apps/02-nfd-operands
   - ../../apps/10-sriov-operator
   - ../../apps/11-ib-interface-normalization
-  - ../../apps/13-nic-discovery
+  - ../../apps/12-nic-discovery
   - ../../apps/14-nvidia-network-operator
   - ../../apps/20-operators-gpu-readiness
   - ../../apps/21-gpu-operands

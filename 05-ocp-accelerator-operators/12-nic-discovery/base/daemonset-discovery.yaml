@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: nic-port-discovery
-  namespace: default
+  namespace: llm-d-setup
   labels:
     app: nic-port-discovery
 spec:

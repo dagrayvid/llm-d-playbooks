@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nic-resource-generator-script
-  namespace: default
+  namespace: llm-d-setup
 data:
   generate_nic_resources.py: |
     import json
@@ -171,7 +171,7 @@ data:
     if [ -f "$OUTPUT_DIR/ib-devices.json" ]; then
       oc create configmap generated-sriov-resources \
         --from-file=ib-devices.json="$OUTPUT_DIR/ib-devices.json" \
-        -n default \
+        -n llm-d-setup \
         --dry-run=client -o yaml | oc apply -f -
     fi
 
@@ -186,4 +186,4 @@ data:
 
     echo ""
     echo "=== Cleanup Discovery Resources ==="
-    oc delete daemonset nic-port-discovery -n default --ignore-not-found=true
+    oc delete daemonset nic-port-discovery -n llm-d-setup --ignore-not-found=true

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: rdma-config-generator
-  namespace: default
+  namespace: llm-d-setup
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -30,13 +30,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: rdma-config-generator
-    namespace: default
+    namespace: llm-d-setup
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: rdma-config-generator-script
-  namespace: default
+  namespace: llm-d-setup
 data:
   generate-rdma-config.py: |
     #!/usr/bin/env python3
@@ -164,7 +164,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: generate-rdma-config
-  namespace: default
+  namespace: llm-d-setup
 spec:
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -192,7 +192,7 @@ spec:
               interval=10
 
               while [ $elapsed -lt $timeout ]; do
-                if oc get configmap generated-sriov-resources -n default &>/dev/null; then
+                if oc get configmap generated-sriov-resources -n llm-d-setup &>/dev/null; then
                   echo "NIC discovery completed"
                   break
                 fi
@@ -202,7 +202,7 @@ spec:
               done
 
               mkdir -p /discovery
-              if oc get configmap generated-sriov-resources -n default -o jsonpath='{.data.ib-devices\.json}' > /discovery/ib-devices.json 2>/dev/null; then
+              if oc get configmap generated-sriov-resources -n llm-d-setup -o jsonpath='{.data.ib-devices\.json}' > /discovery/ib-devices.json 2>/dev/null; then
                 echo "Retrieved IB devices from discovery"
               else
                 echo "No IB devices found in discovery output"

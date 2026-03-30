@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nic-port-discovery-script
-  namespace: default
+  namespace: llm-d-setup
 data:
   discover-nic-ports.sh: |
     #!/bin/bash
