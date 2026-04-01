@@ -170,7 +170,7 @@ fi
 apply_step "20-operators-gpu-readiness" "$SCRIPT_DIR/20-operators-gpu-readiness/base"
 echo "  Waiting for readiness jobs to complete..."
 oc wait --for=condition=complete job/wait-for-network-operator-ready -n llm-d-setup --timeout=1800s 2>/dev/null || true
-oc wait --for=condition=complete job/wait-for-mofed-ready -n nvidia-network-operator --timeout=1800s 2>/dev/null || true
+oc wait --for=condition=complete job/wait-for-mofed-ready -n llm-d-setup --timeout=1800s 2>/dev/null || true
 
 # Step 21: Deploy GPU operands
 apply_step "21-gpu-operands" "$SCRIPT_DIR/21-gpu-operands/base"

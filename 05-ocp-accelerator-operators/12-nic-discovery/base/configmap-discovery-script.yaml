@@ -14,7 +14,7 @@ data:
     echo "Waiting 30 seconds for SR-IOV links to stabilize..."
     sleep 30
 
-    OUTPUT_FILE="/discovery/ports.json"
+    OUTPUT_FILE="/tmp/ports.json"
 
     echo "[" > "$OUTPUT_FILE"
 
@@ -106,8 +106,23 @@ data:
     echo "=== Discovery Complete ==="
     cat "$OUTPUT_FILE"
 
-    if [ -n "${NODE_NAME:-}" ]; then
-      NODE_OUTPUT="/discovery/${NODE_NAME}-ports.json"
-      cp "$OUTPUT_FILE" "$NODE_OUTPUT"
-      echo "Also saved to $NODE_OUTPUT"
+    if [ -z "${NODE_NAME:-}" ]; then
+      echo "ERROR: NODE_NAME not set"
+      exit 1
     fi
+
+    NS="${NAMESPACE:-llm-d-setup}"
+    CM_NAME="nic-discovery-${NODE_NAME}"
+
+    echo ""
+    echo "=== Storing results in ConfigMap $CM_NAME ==="
+    oc create configmap "$CM_NAME" \
+      --from-file=ports.json="$OUTPUT_FILE" \
+      -n "$NS" \
+      --dry-run=client -o yaml | \
+      oc label -f - --local --dry-run=client -o yaml \
+        app=nic-discovery \
+        node="$NODE_NAME" | \
+      oc apply -f -
+
+    echo "ConfigMap $CM_NAME created in namespace $NS"

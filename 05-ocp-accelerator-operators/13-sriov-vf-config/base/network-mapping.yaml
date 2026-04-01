@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-mapping
+  namespace: llm-d-setup
+  labels:
+    app: sriov-config
+  annotations:
+    description: |
+      Optional PF-to-subnet mapping for SR-IOV network configuration.
+      If this ConfigMap exists, the NIC resource generator will:
+        1. Only configure PFs listed here (filtering out uncabled/unused NICs)
+        2. Use the specified subnets for Whereabouts IPAM instead of auto-assigning
+        3. Optionally add VLAN tagging to SriovNetwork resources
+      If this ConfigMap does not exist, the generator falls back to
+      auto-discovery with sequential subnet assignment.
+data:
+  mapping.json: |
+    {
+      "ens40f0np0": {"subnet": "172.16.101.0/24", "gateway": "172.16.101.254"},
+      "ens41f0np0": {"subnet": "172.16.102.0/24", "gateway": "172.16.102.254"},
+      "ens38f0np0": {"subnet": "172.16.103.0/24", "gateway": "172.16.103.254"},
+      "ens37f0np0": {"subnet": "172.16.104.0/24", "gateway": "172.16.104.254"},
+      "ens32f0np0": {"subnet": "172.16.105.0/24", "gateway": "172.16.105.254"},
+      "ens31f0np0": {"subnet": "172.16.106.0/24", "gateway": "172.16.106.254"},
+      "ens36f0np0": {"subnet": "172.16.107.0/24", "gateway": "172.16.107.254"},
+      "ens35f0np0": {"subnet": "172.16.108.0/24", "gateway": "172.16.108.254"},
+      "ens42f0np0": {"subnet": "172.16.109.0/24", "gateway": "172.16.109.254"},
+      "ens34f0np0": {"subnet": "172.16.110.0/24", "gateway": "172.16.110.254"}
+    }

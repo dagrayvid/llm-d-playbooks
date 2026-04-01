@@ -48,6 +48,7 @@ spec:
       containers:
       - name: wait-for-mofed
         image: registry.redhat.io/openshift4/ose-cli:latest
+        imagePullPolicy: IfNotPresent
         command:
         - /bin/bash
         - -c

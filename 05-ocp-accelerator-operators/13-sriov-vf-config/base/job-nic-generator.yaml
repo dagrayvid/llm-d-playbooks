@@ -10,15 +10,6 @@ metadata:
   name: nic-resource-generator
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/exec", "pods/log"]
-    verbs: ["get", "list", "create", "delete", "watch"]
-  - apiGroups: [""]
-    resources: ["nodes"]
-    verbs: ["get", "list"]
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list"]
-  - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
@@ -63,12 +54,16 @@ spec:
             - /bin/bash
             - /scripts/generate-nic-resources.sh
           env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: MTU
               value: "9000"
             - name: IP_RANGE_BASE
               value: "10.0"
             - name: NETWORK_NAMESPACE
-              value: "default"
+              value: "llm-d-setup"
             - name: ROUTE_DEST
               value: "192.168.75.0/24"
             - name: SUBNET_MODE

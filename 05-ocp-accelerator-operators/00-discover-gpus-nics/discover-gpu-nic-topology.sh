@@ -6,7 +6,10 @@
 # to help select the right platform overlay.
 #
 # Usage:
-#   ./discover-gpu-nic-topology.sh
+#   ./discover-gpu-nic-topology.sh [--show-vfs]
+#
+# Options:
+#   --show-vfs   Include SR-IOV Virtual Functions in output (hidden by default)
 #
 # Requires: oc CLI with cluster-admin access
 #
@@ -14,6 +17,18 @@
 # recommending which platform overlay to use.
 
 set -euo pipefail
+
+SHOW_VFS=false
+for arg in "$@"; do
+  case "$arg" in
+    --show-vfs) SHOW_VFS=true ;;
+    -h|--help)
+      echo "Usage: $0 [--show-vfs]"
+      echo "  --show-vfs   Include SR-IOV Virtual Functions in output (hidden by default)"
+      exit 0
+      ;;
+  esac
+done
 
 PROBE_DIR="/tmp/gpu-nic-probe"
 mkdir -p "$PROBE_DIR"
@@ -188,18 +203,39 @@ for NODE in $WORKER_NODES; do
   ' 2>&1 | grep -v "^Starting pod" | grep -v "^Removing debug pod" | grep -v "^To use host binaries" | grep -v "^E[0-9]" > "$PROBE_DIR/${NODE}-raw.txt" || true
 
   # --- Parse and display NIC results (sorted by NUMA, then PCI address) ---
-  nic_lines=$(sed -n '/^---NIC_START---$/,/^---NIC_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^NIC|" | sort -t'|' -k8,8n -k3,3 || true)
+  nic_lines_all=$(sed -n '/^---NIC_START---$/,/^---NIC_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^NIC|" | sort -t'|' -k8,8n -k3,3 || true)
+
+  # Track VF presence from full list, then filter for display
+  vf_count=0
+  if [ -n "$nic_lines_all" ]; then
+    while IFS='|' read -r _ _ _ _ _ _ _ _ _ _ is_vf _; do
+      if [ "$is_vf" = "true" ]; then HAS_VF=true; vf_count=$((vf_count + 1)); fi
+    done <<< "$nic_lines_all"
+  fi
+
+  if [ "$SHOW_VFS" = true ]; then
+    nic_lines="$nic_lines_all"
+  else
+    nic_lines=$(echo "$nic_lines_all" | awk -F'|' '$11 != "true"' || true)
+  fi
+
   if [ -n "$nic_lines" ]; then
     echo ""
-    echo "  NICs:"
+    if [ "$SHOW_VFS" = true ]; then
+      echo "  NICs:"
+    else
+      echo "  NICs (PFs only):"
+    fi
     echo "  $(printf '%-10s %-14s %-12s %-6s %-5s %-7s %-12s %s' 'RDMA_DEV' 'PCI' 'LINK_LAYER' 'NUMA' 'IS_VF' 'CARRIER' 'NETDEV' 'STATE')"
     while IFS='|' read -r _ ifname pci link_layer sriov_capable sriov_totalvfs carrier numa rdma_dev device_id is_vf netdev; do
       if [ "$carrier" = "1" ]; then state="up"; else state="down"; fi
       echo "  $(printf '%-10s %-14s %-12s %-6s %-5s %-7s %-12s %s' "$rdma_dev" "$pci" "$link_layer" "$numa" "$is_vf" "$carrier" "$netdev" "$state")"
       if [ "$link_layer" = "InfiniBand" ]; then HAS_IB=true; COUNT_IB=$((COUNT_IB + 1)); fi
       if [ "$link_layer" = "Ethernet" ]; then HAS_ROCE=true; COUNT_ROCE=$((COUNT_ROCE + 1)); fi
-      if [ "$is_vf" = "true" ]; then HAS_VF=true; fi
     done <<< "$nic_lines"
+    if [ "$SHOW_VFS" = false ] && [ "$vf_count" -gt 0 ]; then
+      echo "  ($vf_count VFs hidden — use --show-vfs to display)"
+    fi
   else
     echo "  NICs: none detected"
   fi
@@ -233,12 +269,12 @@ for NODE in $WORKER_NODES; do
 
     echo "  \"nics\": ["
     first=true
-    if [ -n "$nic_lines" ]; then
+    if [ -n "$nic_lines_all" ]; then
       while IFS='|' read -r _ ifname pci link_layer sriov_capable sriov_totalvfs carrier numa rdma_dev device_id is_vf netdev; do
         [ "$first" = true ] && first=false || echo ","
         printf '    {"rdma_dev":"%s","pci":"%s","link_layer":"%s","numa":%s,"sriov_capable":%s,"is_vf":%s,"carrier":"%s","netdev":"%s"}' \
           "$rdma_dev" "$pci" "$link_layer" "$numa" "$sriov_capable" "$is_vf" "$carrier" "$netdev"
-      done <<< "$nic_lines"
+      done <<< "$nic_lines_all"
     fi
     echo ""
     echo "  ],"
@@ -268,7 +304,12 @@ echo "NUMA Topology (GPU ↔ NIC affinity)"
 echo "=========================================="
 echo ""
 for NODE in $WORKER_NODES; do
-  nic_lines=$(sed -n '/^---NIC_START---$/,/^---NIC_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^NIC|" || true)
+  nic_lines_all_topo=$(sed -n '/^---NIC_START---$/,/^---NIC_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^NIC|" || true)
+  if [ "$SHOW_VFS" = true ]; then
+    nic_lines="$nic_lines_all_topo"
+  else
+    nic_lines=$(echo "$nic_lines_all_topo" | awk -F'|' '$11 != "true"' || true)
+  fi
   gpu_lines=$(sed -n '/^---GPU_START---$/,/^---GPU_END---$/p' "$PROBE_DIR/${NODE}-raw.txt" | grep "^GPU|" || true)
 
   if [ -z "$gpu_lines" ] && [ -z "$nic_lines" ]; then continue; fi
@@ -317,9 +358,9 @@ echo "=========================================="
 echo "Summary"
 echo "=========================================="
 echo ""
-echo "  InfiniBand ports:    $COUNT_IB"
-echo "  Ethernet/RoCE ports: $COUNT_ROCE"
-echo "  NICs are VFs:        $HAS_VF"
+echo "  InfiniBand PFs:      $COUNT_IB"
+echo "  Ethernet/RoCE PFs:  $COUNT_ROCE"
+echo "  VFs present:         $HAS_VF"
 echo "  NVIDIA GPUs:         $HAS_GPU"
 echo "  Virtual machine:     $IS_VM"
 

@@ -1,0 +1,17 @@
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovOperatorConfig
+metadata:
+  name: default
+  namespace: openshift-sriov-network-operator
+spec:
+  configDaemonNodeSelector:
+    feature.node.kubernetes.io/pci-15b3.sriov.capable: "true"
+    network.nvidia.com/operator.mofed.wait: "false"
+    node-role.kubernetes.io/worker: ""
+  configurationMode: daemon
+  disableDrain: false
+  enableInjector: true
+  enableOperatorWebhook: true
+  featureGates:
+    resourceInjectorMatchCondition: true
+  logLevel: 2

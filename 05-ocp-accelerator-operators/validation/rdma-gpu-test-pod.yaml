@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-gpu-test-0
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "ens31f0np0-eth-network"},
+        {"name": "ens32f0np0-eth-network"},
+        {"name": "ens34f0np0-eth-network"},
+        {"name": "ens35f0np0-eth-network"},
+        {"name": "ens36f0np0-eth-network"},
+        {"name": "ens37f0np0-eth-network"},
+        {"name": "ens38f0np0-eth-network"},
+        {"name": "ens40f0np0-eth-network"},
+        {"name": "ens41f0np0-eth-network"},
+        {"name": "ens42f0np0-eth-network"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: ghcr.io/llm-d/llm-d-rdma-tools-dev:latest
+    imagePullPolicy: IfNotPresent
+    command: ["sleep", "infinity"]
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: "all"
+    resources:
+      requests:
+        nvidia.com/gpu: "8"
+        openshift.io/ens31f0np0_roce: "1"
+        openshift.io/ens32f0np0_roce: "1"
+        openshift.io/ens34f0np0_roce: "1"
+        openshift.io/ens35f0np0_roce: "1"
+        openshift.io/ens36f0np0_roce: "1"
+        openshift.io/ens37f0np0_roce: "1"
+        openshift.io/ens38f0np0_roce: "1"
+        openshift.io/ens40f0np0_roce: "1"
+        openshift.io/ens41f0np0_roce: "1"
+        openshift.io/ens42f0np0_roce: "1"
+      limits:
+        nvidia.com/gpu: "8"
+        openshift.io/ens31f0np0_roce: "1"
+        openshift.io/ens32f0np0_roce: "1"
+        openshift.io/ens34f0np0_roce: "1"
+        openshift.io/ens35f0np0_roce: "1"
+        openshift.io/ens36f0np0_roce: "1"
+        openshift.io/ens37f0np0_roce: "1"
+        openshift.io/ens38f0np0_roce: "1"
+        openshift.io/ens40f0np0_roce: "1"
+        openshift.io/ens41f0np0_roce: "1"
+        openshift.io/ens42f0np0_roce: "1"
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_RAW"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-gpu-test-1
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "ens31f0np0-eth-network"},
+        {"name": "ens32f0np0-eth-network"},
+        {"name": "ens34f0np0-eth-network"},
+        {"name": "ens35f0np0-eth-network"},
+        {"name": "ens36f0np0-eth-network"},
+        {"name": "ens37f0np0-eth-network"},
+        {"name": "ens38f0np0-eth-network"},
+        {"name": "ens40f0np0-eth-network"},
+        {"name": "ens41f0np0-eth-network"},
+        {"name": "ens42f0np0-eth-network"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-2.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: ghcr.io/llm-d/llm-d-rdma-tools-dev:latest
+    imagePullPolicy: IfNotPresent
+    command: ["sleep", "infinity"]
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: "all"
+    resources:
+      requests:
+        nvidia.com/gpu: "8"
+        openshift.io/ens31f0np0_roce: "1"
+        openshift.io/ens32f0np0_roce: "1"
+        openshift.io/ens34f0np0_roce: "1"
+        openshift.io/ens35f0np0_roce: "1"
+        openshift.io/ens36f0np0_roce: "1"
+        openshift.io/ens37f0np0_roce: "1"
+        openshift.io/ens38f0np0_roce: "1"
+        openshift.io/ens40f0np0_roce: "1"
+        openshift.io/ens41f0np0_roce: "1"
+        openshift.io/ens42f0np0_roce: "1"
+      limits:
+        nvidia.com/gpu: "8"
+        openshift.io/ens31f0np0_roce: "1"
+        openshift.io/ens32f0np0_roce: "1"
+        openshift.io/ens34f0np0_roce: "1"
+        openshift.io/ens35f0np0_roce: "1"
+        openshift.io/ens36f0np0_roce: "1"
+        openshift.io/ens37f0np0_roce: "1"
+        openshift.io/ens38f0np0_roce: "1"
+        openshift.io/ens40f0np0_roce: "1"
+        openshift.io/ens41f0np0_roce: "1"
+        openshift.io/ens42f0np0_roce: "1"
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_RAW"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi

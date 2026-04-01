@@ -219,7 +219,7 @@ oc get mcp worker -w
 | bare-metal-roce | apply | Feeds NIC data to Network Operator and SR-IOV config |
 | ibm-cloud | **skip** | NIC topology is known from the cloud provider |
 
-DaemonSet that discovers RDMA-capable NICs on every node — PCI addresses, device IDs, link type (IB vs RoCE), carrier status. Results are written to `/var/lib/nic-discovery/` on each node and are consumed by Step 13.
+DaemonSet that discovers RDMA-capable NICs on every node — PCI addresses, device IDs, link type (IB vs RoCE), carrier status. Results are stored as ConfigMaps (`nic-discovery-<node>`) in the `llm-d-setup` namespace and consumed by Step 13.
 
 ```bash
 oc apply -k 05-ocp-accelerator-operators/12-nic-discovery/base/
@@ -229,9 +229,13 @@ To check:
 
 ```bash
 oc get pods -n llm-d-setup -l app=nic-port-discovery -o wide
+oc get configmap -n llm-d-setup -l app=nic-discovery
+```
 
-oc exec -n llm-d-setup $(oc get pods -n llm-d-setup -l app=nic-port-discovery -o name | head -1) \
-  -c pause -- cat /discovery/ports.json
+To inspect a specific node's discovery data:
+
+```bash
+oc get configmap -n llm-d-setup -l app=nic-discovery -o jsonpath='{.items[0].data.ports\.json}' | jq .
 ```
 
 ### Step 13: SR-IOV VF Config
@@ -242,7 +246,19 @@ oc exec -n llm-d-setup $(oc get pods -n llm-d-setup -l app=nic-port-discovery -o
 | bare-metal-roce | apply | Generates VF policies from Step 12 discovery data |
 | ibm-cloud | **skip** | NICs are already VFs from the hypervisor |
 
-Job that reads discovery data from Step 12, then generates and applies `SriovNetworkNodePolicy` and `SriovNetwork` resources.
+Job that reads NIC discovery ConfigMaps from Step 12, then generates and applies `SriovNetworkNodePolicy` and `SriovNetwork` resources.
+
+**Optional: explicit network mapping.** By default the generator auto-assigns sequential subnets to each PF (sorted alphabetically). If your cluster has a specific VLAN/subnet layout, create a `network-mapping` ConfigMap **before** running the generator Job. This ensures each PF's VFs get IP addresses on the correct subnet for their physical VLAN. PFs not listed in the mapping are excluded from SR-IOV configuration.
+
+```bash
+# Edit the mapping to match your cluster's PF→subnet layout:
+vi 05-ocp-accelerator-operators/13-sriov-vf-config/base/network-mapping.yaml
+
+# Apply it (optional — skip this for auto-discovery mode):
+oc apply -f 05-ocp-accelerator-operators/13-sriov-vf-config/base/network-mapping.yaml
+```
+
+Then apply the generator:
 
 ```bash
 oc apply -k 05-ocp-accelerator-operators/13-sriov-vf-config/base/
@@ -277,8 +293,15 @@ oc apply -k 05-ocp-accelerator-operators/14-nvidia-network-operator/overlays/ibm
 To check:
 
 ```bash
+oc logs job/configure-nic-policy -n nvidia-network-operator -f
 oc get nicclusterpolicy
 oc get pods -n nvidia-network-operator -l nvidia.com/ofed-driver -w
+```
+
+To verify the MOFED driver is loaded (once pods are Running):
+
+```bash
+oc exec -n nvidia-network-operator $(oc get pods -n nvidia-network-operator -l nvidia.com/ofed-driver -o jsonpath='{.items[0].metadata.name}') -- ofed_info -s
 ```
 
 ### Step 15: IBM Cloud Networking
@@ -328,7 +351,7 @@ To check:
 
 ```bash
 oc logs job/wait-for-network-operator-ready -n llm-d-setup -f
-oc logs job/wait-for-mofed-ready -n nvidia-network-operator -f
+oc logs job/wait-for-mofed-ready -n llm-d-setup -f
 ```
 
 ### Step 21: GPU Operands
