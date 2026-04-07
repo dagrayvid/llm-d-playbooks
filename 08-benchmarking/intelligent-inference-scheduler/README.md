@@ -18,29 +18,57 @@ In the example detailed here, we first find out how many tokens we can store in 
 ## Prerequisites
 
 - OpenShift cluster with GPU nodes available (4 GPUs)
-- `oc` CLI authenticated to the cluster
+- `oc` CLI authenticated to the cluster as a user with the `cluster-admin` role
 - Red Hat OpenShift AI operator installed
+- User workload monitoring enabled (see Step 1)
 
-## Step 1: Deploy Monitoring Stack
+## Step 1: Enable User Workload Monitoring
 
-Deploy Prometheus and Grafana for real-time metrics visualization during benchmarks.
+Enable user workload monitoring so that PodMonitor resources can scrape metrics from model serving pods.
+
+```bash
+oc -n openshift-monitoring get configmap cluster-monitoring-config -o yaml 2>/dev/null || \
+cat << 'EOF' | oc apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+EOF
+```
+
+If the ConfigMap already exists, ensure `enableUserWorkload: true` is set:
+
+```bash
+oc -n openshift-monitoring edit configmap cluster-monitoring-config
+```
+
+Verify the user workload monitoring pods are running:
+
+```bash
+oc -n openshift-user-workload-monitoring get pod
+```
+
+Expected output should show `prometheus-operator`, `prometheus-user-workload`, and `thanos-ruler-user-workload` pods in `Running` state.
+
+## Step 2: Deploy Performance Dashboard
+
+Deploy the LLM-D performance dashboard to the OpenShift Console. This uses the built-in monitoring stack (enabled in Step 1) so no separate Prometheus or Grafana deployment is needed.
 
 ```bash
 # From the 08-benchmarking directory
 cd 08-benchmarking/intelligent-inference-scheduler
 
-# Deploy monitoring
-oc apply -k monitoring
-
-# Wait for Grafana to be ready
-oc wait --for=condition=ready pod -l app=grafana -n llm-d-monitoring --timeout=300s
-
-# Get Grafana URL
-export GRAFANA_URL=$(oc get route grafana-secure -n llm-d-monitoring -o jsonpath='{.spec.host}')
-echo "Grafana: https://$GRAFANA_URL"
+# Deploy the OpenShift Console dashboard
+oc apply -f monitoring/openshift-dashboard.yaml
 ```
 
-Access Grafana with default credentials: `admin` / `admin`
+The dashboard will appear in the OpenShift Console under **Observe > Dashboards > LLM-D Performance Dashboard**.
+
+Use the **Model** and **Namespace** dropdowns at the top to filter metrics.
 
 ### Key Metrics to Watch
 
@@ -51,7 +79,7 @@ Access Grafana with default credentials: `admin` / `admin`
 | **Requests per Second** | Overall throughput |
 | **GPU Utilization** | Balanced utilization across replicas |
 
-## Step 2: Generate Test Data
+## Step 3: Generate Test Data
 
 Generate prompts sized to fill approximately 80% of the KV cache on each GPU. This ensures the benchmark exercises LLM-D's prefix-aware routing under realistic memory pressure, where intelligent scheduling makes the biggest difference.
 
@@ -190,7 +218,7 @@ oc cp ./test-data-generator/prefix/prompts.csv demo-llm-benchmarks/benchmark-dat
 oc delete pod benchmark-data-loader -n demo-llm-benchmarks
 ```
 
-## Step 3: Deploy vLLM with 4 Replicas
+## Step 4: Deploy vLLM with 4 Replicas
 
 Deploy vanilla vLLM as the baseline. This uses standard round-robin load balancing across 4 replicas serving `Qwen/Qwen3-0.6B`.
 
@@ -212,7 +240,7 @@ The vLLM deployment includes:
 - **Service** (`qwen-vllm-lb`) - ClusterIP load balancer across all replicas
 - **PodMonitor** - Exposes vLLM metrics to Prometheus
 
-## Step 4: Run GuideLLM Benchmark Against vLLM
+## Step 5: Run GuideLLM Benchmark Against vLLM
 
 Run GuideLLM as an OpenShift Job targeting the vLLM deployment. The included kustomize overlay pre-configures the target URL.
 
@@ -247,23 +275,19 @@ Once the job completes you will see the request latency statistics e.g.
 
 Take note of these results for vLLM.
 
-#### Grafana dashboard
+#### Dashboard
 
-Look at the grafana dashboard, you should see the KV Cache Hit rate landing at around 54%, meaning just over half of the requests are hitting vLLM pods which have already processed this prompt.  You should also see some high values being recorded for TTFT throughout the benchmark.
+In the OpenShift Console, go to **Observe > Dashboards > LLM-D Performance Dashboard**. You should see the KV Cache Hit rate landing at around 54%, meaning just over half of the requests are hitting vLLM pods which have already processed this prompt. You should also see some high values being recorded for TTFT throughout the benchmark.
 
-![vLLM Grafana Dashboard](assets/vllm-grafana.png)
+![vLLM Dashboard](assets/vllm-grafana.png)
 
-## Step 5: Replace vLLM with LLM-D
+## Step 6: Replace vLLM with LLM-D
 
 Tear down the vLLM deployment and deploy LLM-D with the same model and 4 replicas. LLM-D adds an intelligent scheduler that routes requests based on prefix cache scoring, KV-cache utilization, and queue depth.
 
 ```bash
 # Remove vLLM deployment
 oc delete -k vllm/qwen
-
-# Reset Prometheus to get clean metrics for the LLM-D run
-oc delete pod -l app=prometheus -n llm-d-monitoring
-oc wait --for=condition=ready pod -l app=prometheus -n llm-d-monitoring --timeout=120s
 
 # Deploy LLM-D (creates Gateway, HardwareProfile, LLMInferenceService with 4 replicas)
 oc apply -k llm-d/qwen
@@ -284,7 +308,7 @@ The LLM-D deployment includes:
   - `kv-cache-utilization-scorer` (weight: 2) - Balances GPU memory usage
   - `queue-scorer` (weight: 2) - Avoids overloaded replicas
 
-## Step 6: Run GuideLLM Benchmark Against LLM-D
+## Step 7: Run GuideLLM Benchmark Against LLM-D
 
 Run GuideLLM as an OpenShift Job targeting the LLM-D deployment. The overlay pre-configures the target URL to route through the LLM-D intelligent scheduler.
 
@@ -319,14 +343,14 @@ Once the job completes you will see the request latency statistics e.g.
 
 Take note of these results for LLM-D.
 
-#### Grafana dashboard
+#### Dashboard
 
-Look at the grafana dashboard, you should see the KV Cache Hit rate landing at around 92%, meaning the majority of requests are hitting vLLM pods which have already processed this prompt.  You should also see the TTFT values steadily declining.  Both of these metrics are indications of the benefits of llm-d intelligent inference scheduling.
+In the OpenShift Console, go to **Observe > Dashboards > LLM-D Performance Dashboard**. You should see the KV Cache Hit rate landing at around 92%, meaning the majority of requests are hitting vLLM pods which have already processed this prompt. You should also see the TTFT values steadily declining. Both of these metrics are indications of the benefits of llm-d intelligent inference scheduling.
 
-![vLLM Grafana Dashboard](assets/llm-d-grafana.png)
+![LLM-D Dashboard](assets/llm-d-grafana.png)
 
 
-## Step 7: Compare Results
+## Step 8: Compare Results
 
 Compare the GuideLLM output from Steps 4 and 6 side-by-side. The benchmarks were run at concurrency levels of 32 and 64.
 
@@ -358,7 +382,7 @@ TTFT is where LLM-D's intelligent routing shows the biggest impact. At concurren
 
 At higher concurrency, LLM-D's more efficient cache utilization reduces decode-phase latency as well. The improvement scales with load because cache hits free up GPU compute that would otherwise be spent on redundant prefill.
 
-### KV Cache Hit Rate (Grafana)
+### KV Cache Hit Rate
 
 | Metric | vLLM | LLM-D |
 |--------|------|-------|
@@ -380,8 +404,8 @@ The results demonstrate two key advantages of intelligent inference scheduling:
 # Remove LLM-D deployment
 oc delete -k llm-d/qwen
 
-# Remove monitoring stack
-oc delete -k monitoring
+# Remove OpenShift Console dashboard
+oc delete -f monitoring/openshift-dashboard.yaml
 
 # Remove benchmark namespace (includes PVC and test data)
 oc delete namespace demo-llm-benchmarks
