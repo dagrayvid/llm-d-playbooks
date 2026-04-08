@@ -18,13 +18,12 @@ In the example detailed here, we first find out how many tokens we can store in 
 ## Prerequisites
 
 - OpenShift cluster with GPU nodes available (4 GPUs)
-- `oc` CLI authenticated to the cluster as a user with the `cluster-admin` role
+- `oc` CLI authenticated to the cluster ( optionally as a user with the `cluster-admin` role to enable user workload monitoring)
 - Red Hat OpenShift AI operator installed
-- User workload monitoring enabled (see Step 1)
 
 ## Step 1: Enable User Workload Monitoring
 
-Enable user workload monitoring so that PodMonitor resources can scrape metrics from model serving pods.
+Enable user workload monitoring so that PodMonitor resources can scrape metrics from model serving pods.  Note:  You will need cluster-admin access to perform this task.
 
 ```bash
 oc -n openshift-monitoring get configmap cluster-monitoring-config -o yaml 2>/dev/null || \
@@ -277,7 +276,11 @@ Take note of these results for vLLM.
 
 #### Dashboard
 
-In the OpenShift Console, go to **Observe > Dashboards > LLM-D Performance Dashboard**. You should see the KV Cache Hit rate landing at around 54%, meaning just over half of the requests are hitting vLLM pods which have already processed this prompt. You should also see some high values being recorded for TTFT throughout the benchmark.
+In the OpenShift Console, go to **Observe > Dashboards > LLM-D Performance Dashboard**. 
+
+**Select "qwen-vllm" from the model list to ensure you're looking at the correct metrics**
+
+You should see the KV Cache Hit rate landing at around 54%, meaning just over half of the requests are hitting vLLM pods which have already processed this prompt. You should also see some high values being recorded for TTFT throughout the benchmark.
 
 ![vLLM Dashboard](assets/vllm-grafana.png)
 
@@ -345,7 +348,11 @@ Take note of these results for LLM-D.
 
 #### Dashboard
 
-In the OpenShift Console, go to **Observe > Dashboards > LLM-D Performance Dashboard**. You should see the KV Cache Hit rate landing at around 92%, meaning the majority of requests are hitting vLLM pods which have already processed this prompt. You should also see the TTFT values steadily declining. Both of these metrics are indications of the benefits of llm-d intelligent inference scheduling.
+In the OpenShift Console, go to **Observe > Dashboards > LLM-D Performance Dashboard**. 
+
+**Select "Qwen" from the model list to ensure you're looking at the correct metrics**
+
+You should see the KV Cache Hit rate landing at around 92%, meaning the majority of requests are hitting vLLM pods which have already processed this prompt. You should also see the TTFT values steadily declining. Both of these metrics are indications of the benefits of llm-d intelligent inference scheduling.
 
 ![LLM-D Dashboard](assets/llm-d-grafana.png)
 

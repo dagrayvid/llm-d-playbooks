@@ -157,7 +157,7 @@ data:
                         "span": 3,
                         "targets": [
                             {
-                                "expr": "sum(kserve_vllm:prefix_cache_hits_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"}) / sum(kserve_vllm:prefix_cache_queries_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"})",
+                                "expr": "sum(rate(kserve_vllm:prefix_cache_hits_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"}[5m])) / sum(rate(kserve_vllm:prefix_cache_queries_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"}[5m]))",
                                 "format": "time_series",
                                 "legendFormat": "Overall Cache Hit Rate",
                                 "legendLink": null
@@ -196,7 +196,7 @@ data:
                         "span": 3,
                         "targets": [
                             {
-                                "expr": "kserve_vllm:prefix_cache_hits_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"} / kserve_vllm:prefix_cache_queries_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"}",
+                                "expr": "rate(kserve_vllm:prefix_cache_hits_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"}[5m]) / rate(kserve_vllm:prefix_cache_queries_total{llm_isvc_name=~\"$model\", namespace=~\"$namespace\", instance=~\".*:8000\"}[5m])",
                                 "format": "time_series",
                                 "legendFormat": "Pod {{pod}}",
                                 "legendLink": null
