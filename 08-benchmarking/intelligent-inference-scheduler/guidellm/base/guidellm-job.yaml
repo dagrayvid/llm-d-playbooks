@@ -26,8 +26,6 @@ spec:
             value: "3000"
           - name: GUIDELLM_DATA
             value: "/data/prompts.csv"
-          - name: GUIDELLM_PROCESSOR
-            value: "Qwen/Qwen3-0.6B"
           - name: HF_HOME
             value: /tmp/hf-cache
           - name: TRANSFORMERS_CACHE
