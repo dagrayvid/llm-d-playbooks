@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: macvlan-configurator
+  namespace: nvidia-network-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: macvlan-configurator
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: ["nv-ipam.nvidia.com"]
+  resources: ["ippools", "cidrpools"]
+  verbs: ["get", "list", "create", "patch", "update"]
+- apiGroups: ["k8s.cni.cncf.io"]
+  resources: ["network-attachment-definitions"]
+  verbs: ["get", "list", "create", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: macvlan-configurator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: macvlan-configurator
+subjects:
+- kind: ServiceAccount
+  name: macvlan-configurator
+  namespace: nvidia-network-operator
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: configure-macvlan-networks
+  namespace: nvidia-network-operator
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: macvlan-configurator
+    spec:
+      serviceAccountName: macvlan-configurator
+      restartPolicy: OnFailure
+      containers:
+      - name: configurator
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        env:
+        - name: NETWORK_NAMESPACE
+          value: "openshift-multus"
+        - name: PER_NODE_BLOCK_SIZE
+          value: "200"
+        - name: MTU
+          value: "9000"
+        - name: NAD_NAME_PREFIX
+          value: "llmd-roce-net"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "=== Macvlan + SBR Configurator ==="
+          echo ""
+
+          # Read network-mapping ConfigMap
+          if ! oc get configmap network-mapping -n llm-d-setup &>/dev/null; then
+            echo "ERROR: network-mapping ConfigMap not found in llm-d-setup namespace"
+            echo "Create it with PF-to-subnet mappings before running this job"
+            exit 1
+          fi
+
+          oc get configmap network-mapping -n llm-d-setup \
+            -o jsonpath='{.data.mapping\.json}' > /tmp/network-mapping.json
+
+          python3 /scripts/generate-macvlan-resources.py
+
+          echo ""
+
+          # Verify NADs were created
+          echo "--- Verifying NetworkAttachmentDefinitions ---"
+          sleep 5
+          oc get net-attach-def -n "$NETWORK_NAMESPACE" 2>/dev/null || echo "(none yet — may take a moment)"
+
+          echo ""
+          echo "=== Macvlan + SBR configuration complete ==="
+        volumeMounts:
+          - name: scripts
+            mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: macvlan-configurator-scripts
+            defaultMode: 0755

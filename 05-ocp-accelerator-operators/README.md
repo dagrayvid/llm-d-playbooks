@@ -15,12 +15,37 @@ The operator manifests and automation in this chapter are adapted from [Infrabri
 - Worker nodes with NVIDIA GPUs
 - For RDMA: Mellanox/NVIDIA ConnectX NICs (InfiniBand or RoCE)
 
+### Requirements for GPUDirect RDMA (bare-metal)
+
+GPUDirect RDMA enables direct DMA between GPUs and NICs over PCIe, bypassing the CPU. This is required for high-performance multi-node GPU workloads (NCCL, vLLM with disaggregated prefill, etc.). The following must be in place:
+
+1. **IOMMU in passthrough mode** (`iommu=pt` kernel arg) — allows PCIe peer-to-peer DMA without address translation. Without this, the IOMMU blocks NIC↔GPU transfers.
+
+2. **ACS disabled** (`pci=noacs` kernel arg + systemd service) — disables PCIe Access Control Services so P2P transactions route directly through PCIe switches instead of being redirected through the root complex. The `pci=noacs` kernel arg prevents the kernel from enabling ACS, while a systemd oneshot service clears ACS that firmware/BIOS enables during POST (common on Dell PowerEdge and other enterprise servers).
+
+3. **Unlimited memlock** (`ContainerRuntimeConfig`) — CRI-O defaults the memlock ulimit to 8192 KB. RDMA memory registration for GPU buffers requires more. The `ContainerRuntimeConfig` sets the default to unlimited. Pods still need `IPC_LOCK` capability.
+
+4. **Jumbo frames** (MTU 9000 on PFs) — optional but recommended. Improves GPUDirect RDMA throughput by ~5% (370→392 Gb/s on NDR200). PF MTUs must be set on the host before macvlan interfaces are created. Use the NMState operator ([Step 04](#step-04-nmstate-operator)) with `NodeNetworkConfigurationPolicy` resources.
+
+5. **Source-based routing (SBR)** — required when each RoCE PF is on a separate VLAN/subnet. Without SBR, cross-subnet RDMA traffic cannot reach the gateway and connections fail. SBR ensures each NIC's traffic exits through its own gateway, allowing the switch to handle inter-VLAN routing.
+
+Items 1–3 are applied automatically by [Step 03](#step-03-worker-node-gpurdma-config) via MachineConfig and ContainerRuntimeConfig. Item 4 uses the NMState operator (Step 04). Item 5 is integrated into the macvlan NADs (Step 15).
+
+### Requirements for SR-IOV (bare-metal-roce with VFs)
+
+If using the SR-IOV VF approach instead of macvlan + shared device plugin:
+
+- **SR-IOV must be enabled in BIOS** (Intel VT-d / IOMMU and SR-IOV global enable). Check your server's BIOS/iDRAC settings under Integrated Devices or Virtualization.
+- SR-IOV Network Operator must be installed (Step 10)
+
+> **Note:** The current `bare-metal-roce` platform uses macvlan + RDMA shared device plugin, which does **not** require SR-IOV BIOS settings or VFs. The SR-IOV approach is available but not the default.
+
 ## Platform Selection
 
 | Platform | Description |
 |----------|-------------|
 | `bare-metal-ib` | Bare-metal with InfiniBand |
-| `bare-metal-roce` | Bare-metal with RoCE (SR-IOV) |
+| `bare-metal-roce` | Bare-metal with RoCE (macvlan + RDMA shared device plugin) |
 | `ibm-cloud` | IBM Cloud VMs (host-device + NADs) |
 
 Start with [Step 00](#step-00-discover-gpus--nics) to identify your hardware and determine which platform applies.
@@ -155,6 +180,124 @@ To check (labels may take ~60s to appear):
 ```bash
 oc get nodes -l feature.node.kubernetes.io/pci-10de.present=true
 oc get nodes -l feature.node.kubernetes.io/pci-15b3.present=true
+```
+
+### Step 03: Worker Node GPU/RDMA Config
+
+| Platform | Action | Why |
+|----------|--------|-----|
+| bare-metal-ib | apply | GPUDirect RDMA requires IOMMU passthrough and ACS disabled |
+| bare-metal-roce | apply | GPUDirect RDMA requires IOMMU passthrough and ACS disabled |
+| ibm-cloud | **skip** | Hypervisor handles IOMMU/ACS; memlock is set by cloud runtime |
+
+> **Warning: this step triggers worker node reboots.** The MachineConfig changes
+> kernel boot arguments, which requires the MachineConfigPool to roll out updates
+> to all worker nodes. Plan for downtime accordingly.
+
+> **When is this needed?** Only if you plan to use GPUDirect RDMA (NCCL with
+> `NCCL_NET_GDR_LEVEL`, `ib_write_bw --use_cuda`, etc.). If your workloads only
+> use host-memory RDMA or don't use RDMA at all, you can skip this step. However,
+> the memlock ulimit change is broadly useful for any RDMA workload.
+
+Applies three resources:
+
+- **MachineConfig `99-worker-gpu-rdma`** — adds kernel arguments:
+  - `iommu=pt` — sets IOMMU to passthrough mode, allowing PCIe peer-to-peer DMA between GPUs and NICs without address translation
+  - `pci=noacs` — prevents the kernel from enabling PCIe Access Control Services during PCI enumeration
+- **MachineConfig `99-worker-disable-pcie-acs`** — installs a systemd oneshot service that clears ACS on all PCIe bridges at boot. Required because `pci=noacs` alone does not disable ACS that firmware/BIOS enables during POST (common on Dell PowerEdge and other enterprise servers with SR-IOV Global Enable in BIOS)
+- **ContainerRuntimeConfig `worker-rdma-memlock`** — sets the default memlock ulimit to unlimited for all containers on worker nodes. Without this, CRI-O defaults to 8192 KB, which is too low for RDMA memory registration of GPU buffers. Pods still need the `IPC_LOCK` capability in their securityContext.
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/03-worker-gpu-rdma-config/base/
+```
+
+**Combined master+worker nodes:** By default, these configs target the `worker` MCP only. If your cluster has nodes that serve as both master and worker (e.g., compact clusters, single-node, or lab setups), those nodes belong to the `master` MCP and will not receive the worker-targeted configs. Apply the master overlay in addition:
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/03-worker-gpu-rdma-config/overlays/master/
+```
+
+To check:
+
+```bash
+# Watch the MachineConfigPool roll out (nodes will reboot)
+oc get mcp worker -w
+
+# After reboot, verify kernel args are applied
+oc debug node/<worker-node> -- chroot /host cat /proc/cmdline | tr ' ' '\n' | grep -E 'iommu|noacs'
+
+# Verify memlock is unlimited in a test pod
+oc exec <pod> -- sh -c 'ulimit -l'
+```
+
+### Step 04: NMState Operator
+
+| Platform | Action | Why |
+|----------|--------|-----|
+| bare-metal-ib | **skip** | IB fabric handles MTU at the subnet manager level |
+| bare-metal-roce | apply | Sets jumbo frame MTU on RoCE PFs via declarative NNCPs |
+| ibm-cloud | **skip** | Hypervisor handles NIC MTU |
+
+> **Optional but recommended for RoCE.** Install the Kubernetes NMState Operator to
+> declaratively manage host network interface settings (primarily MTU). NMState uses
+> `NodeNetworkConfigurationPolicy` (NNCP) CRs to set desired state on node
+> interfaces. This is safer than MachineConfig-based scripts because NMState
+> properly manages NetworkManager profiles without interfering with OVN-Kubernetes
+> or the OVS bridge (`br-ex`).
+
+This step has two sub-steps because the `NMState` CR cannot be created until the
+operator's CRD is registered.
+
+**Step 04a: Install the operator**
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/04-nmstate-operator/base/operator/
+```
+
+Wait for the operator CSV to be ready:
+
+```bash
+oc get csv -n openshift-nmstate -w
+```
+
+**Step 04b: Create the NMState instance**
+
+Once the CSV shows `Succeeded`:
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/04-nmstate-operator/base/instance/
+```
+
+To check:
+
+```bash
+# Wait for the NMState instance to be available
+oc wait --for=condition=Available nmstate/nmstate --timeout=300s
+
+# Verify daemon pods are running on all nodes
+oc get pods -n openshift-nmstate
+```
+
+**Step 04c: Set MTU 9000 on RoCE PFs** (requires network-mapping from Step 13)
+
+> Run this after the `network-mapping` ConfigMap exists in `llm-d-setup`. The job
+> reads the mapping and creates a single `NodeNetworkConfigurationPolicy` (NNCP)
+> that sets MTU 9000 on every listed PF. It only touches interfaces in the mapping
+> — never the OVS uplink or management interfaces. The MTU env var defaults to
+> `9000`; override it in the job spec if needed.
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/04-nmstate-operator/base/nncp/
+```
+
+To check:
+
+```bash
+oc logs job/configure-roce-pf-mtu -n openshift-nmstate -f
+
+# Verify NNCP applied
+oc get nncp
+oc get nnce
 ```
 
 ### Step 10: SR-IOV Operator
@@ -304,13 +447,53 @@ To verify the MOFED driver is loaded (once pods are Running):
 oc exec -n nvidia-network-operator $(oc get pods -n nvidia-network-operator -l nvidia.com/ofed-driver -o jsonpath='{.items[0].metadata.name}') -- ofed_info -s
 ```
 
-### Step 15: IBM Cloud Networking
+### Step 15: Platform-Specific Networking
 
 | Platform | Action | Why |
 |----------|--------|-----|
-| bare-metal-ib | **skip** | Uses SR-IOV / RDMA shared devices instead |
-| bare-metal-roce | **skip** | Uses SR-IOV / RDMA shared devices instead |
-| ibm-cloud | apply | Attaches VF NICs to pods via host-device CNI |
+| bare-metal-ib | **skip** | Uses RDMA shared devices configured in Step 14 |
+| bare-metal-roce | apply (`15-roce-macvlan`) | Creates macvlan networks + IP pools for each RoCE PF |
+| ibm-cloud | apply (`15-ibm-cloud-networking`) | Attaches VF NICs to pods via host-device CNI |
+
+#### bare-metal-roce: Macvlan + SBR + RDMA Shared Device Plugin
+
+Creates `NetworkAttachmentDefinition` (NAD) and `IPPool` resources for each RoCE PF listed in the `network-mapping` ConfigMap (from Step 13). NADs are named **`llmd-roce-net-<n>`** by default in **`openshift-multus`** (env **`NAD_NAME_PREFIX`** overrides; avoids clobbering other `roce-net-*` NADs). Optional per-PF **`roceIndex`** in the mapping sets `<n>`; see `15-roce-macvlan/README.md`. Each PF still uses its real netdev as the macvlan **master**; pods attach by abstract NAD name. IP addresses come from NV-IPAM per-node blocks within each PF's subnet.
+
+Each NAD uses a **chained CNI plugin** configuration:
+1. **macvlan** — creates a sub-interface on the physical PF
+2. **sbr-custom** — source-based routing to ensure cross-subnet RDMA traffic exits through the correct NIC's gateway
+
+Source-based routing is required because each PF is on a separate VLAN/subnet. Without SBR, cross-rail RDMA traffic (e.g., GPU0's NIC on subnet A to GPU1's NIC on subnet B) cannot reach the gateway and the connection fails. SBR creates per-interface routing tables that force packets from each NIC's IP through that NIC's gateway, letting the switch handle inter-VLAN routing.
+
+This step also deploys a DaemonSet (`cni-sbr-custom-plugin`) that installs the custom SBR CNI binary on every node.
+
+This approach does **not** use SR-IOV VFs. Instead, pods share the physical function directly via the RDMA Shared Device Plugin (configured in Step 14) and macvlan CNI. NCCL/UCX handle GPU-NIC topology awareness automatically.
+
+> **MTU note:** The macvlan MTU must not exceed the master PF's MTU. The default
+> is `9000` (jumbo frames), which requires running Step 04c first to set PF MTUs
+> via NMState. If your PFs are at 1500 (default) and you skipped Step 04c, set
+> the job's `MTU` env var to `1500`. Jumbo frames improve GPUDirect RDMA
+> throughput by ~5% (370→392 Gb/s on NDR200).
+
+```bash
+oc apply -k 05-ocp-accelerator-operators/15-roce-macvlan/base/
+```
+
+To check:
+
+```bash
+# SBR plugin installed on nodes
+oc get ds cni-sbr-custom-plugin -n openshift-multus
+
+# Configuration job
+oc logs job/configure-macvlan-networks -n nvidia-network-operator -f
+
+# Resources created
+oc get ippools -n nvidia-network-operator
+oc get net-attach-def -n openshift-multus
+```
+
+#### ibm-cloud: Host-Device Networking
 
 Configure secondary high-speed networking using the host-device CNI plugin. On IBM Cloud, nodes are VMs where SR-IOV is at the hypervisor level, so we attach full NIC interfaces directly to pods via NetworkAttachmentDefinitions (NADs).
 

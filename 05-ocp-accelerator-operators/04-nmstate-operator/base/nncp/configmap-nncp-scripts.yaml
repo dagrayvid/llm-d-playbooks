@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nmstate-nncp-scripts
+  namespace: openshift-nmstate
+data:
+  generate-nncp.py: |
+    #!/usr/bin/env python3
+    """Generate per-node NNCPs for L3 routed RoCE PF configuration.
+
+    Reads /tmp/network-mapping.json (formula-based rail/host addressing) and creates
+    one NNCP per node that:
+      - Sets MTU and brings PFs up
+      - Assigns the host IP (.1/24) on each PF
+      - Adds per-rail /16 static route (keeps rail traffic on correct interface)
+      - Adds /12 ECMP fallback route (all interfaces, for failover)
+
+    Addressing formula:
+      hostIp:    172.<baseOctet + railId>.<hostId>.<hostIpOctet>/24
+      gateway:   172.<baseOctet + railId>.<hostId>.<hostGatewayOctet>
+      rail route: 172.<baseOctet + railId>.0.0/<railRoutePrefix> via gateway
+      ECMP route: <ecmpRoute> via gateway (same on every interface)
+    """
+    import json
+    import sys
+    import os
+    import subprocess
+
+    MTU = int(os.environ.get("MTU", "9000"))
+
+    mapping_file = "/tmp/network-mapping.json"
+
+    if not os.path.exists(mapping_file):
+        print("ERROR: /tmp/network-mapping.json not found")
+        sys.exit(1)
+
+    with open(mapping_file, 'r') as f:
+        mapping = json.load(f)
+
+    scheme = mapping.get("scheme")
+    hosts = mapping.get("hosts")
+    ifaces = mapping.get("interfaces")
+
+    if not scheme or not hosts or not ifaces:
+        print("ERROR: mapping must contain 'scheme', 'hosts', and 'interfaces' keys")
+        sys.exit(1)
+
+    base_octet = scheme["baseOctet"]
+    gw_octet = scheme["hostGatewayOctet"]
+    host_ip_octet = scheme["hostIpOctet"]
+    rail_prefix = scheme["railRoutePrefix"]
+    ecmp_route = scheme["ecmpRoute"]
+
+    ordered_ifaces = sorted(ifaces.items(), key=lambda x: int(x[1]["roceIndex"]))
+    pf_names = [pf for pf, _ in ordered_ifaces]
+
+    print("=== RoCE PF Configurator (NMState NNCP) ===")
+    print("  PFs: %s" % ", ".join(pf_names))
+    print("  Hosts: %d (%s)" % (len(hosts), ", ".join(sorted(hosts.keys()))))
+    print("  MTU: %d" % MTU)
+    print("  Addressing: 172.<%d + railId>.<hostId>.%d/24, gw .%d" % (base_octet, host_ip_octet, gw_octet))
+    print("  Rail route: /<prefix %d>, ECMP fallback: %s" % (rail_prefix, ecmp_route))
+    print("")
+
+    def oc_apply(resource_dict):
+        resource_json = json.dumps(resource_dict)
+        p = subprocess.run(
+            ["oc", "apply", "-f", "-"],
+            input=resource_json,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        return p.returncode == 0, p.stderr.strip()
+
+    errors = 0
+
+    for hostname in sorted(hosts.keys()):
+        host_id = hosts[hostname]
+        nncp_name = "roce-pf-config-host%d" % host_id
+
+        nmstate_interfaces = []
+        nmstate_routes = []
+
+        for pf_name, info in ordered_ifaces:
+            rail_id = int(info["railId"])
+            second_octet = base_octet + rail_id
+            host_ip = "172.%d.%d.%d" % (second_octet, host_id, host_ip_octet)
+            gateway = "172.%d.%d.%d" % (second_octet, host_id, gw_octet)
+            rail_dst = "172.%d.0.0/%d" % (second_octet, rail_prefix)
+
+            nmstate_interfaces.append({
+                "name": pf_name,
+                "type": "ethernet",
+                "state": "up",
+                "mtu": MTU,
+                "ipv4": {
+                    "enabled": True,
+                    "dhcp": False,
+                    "address": [{"ip": host_ip, "prefix-length": 24}]
+                },
+                "ipv6": {"enabled": False}
+            })
+
+            nmstate_routes.append({
+                "destination": rail_dst,
+                "next-hop-interface": pf_name,
+                "next-hop-address": gateway
+            })
+            nmstate_routes.append({
+                "destination": ecmp_route,
+                "next-hop-interface": pf_name,
+                "next-hop-address": gateway
+            })
+
+        nncp = {
+            "apiVersion": "nmstate.io/v1",
+            "kind": "NodeNetworkConfigurationPolicy",
+            "metadata": {
+                "name": nncp_name
+            },
+            "spec": {
+                "nodeSelector": {
+                    "kubernetes.io/hostname": hostname
+                },
+                "desiredState": {
+                    "interfaces": nmstate_interfaces,
+                    "routes": {
+                        "config": nmstate_routes
+                    }
+                }
+            }
+        }
+
+        ok, err = oc_apply(nncp)
+        if ok:
+            print("  NNCP %s -> %s (%d interfaces, %d routes)" % (
+                nncp_name, hostname, len(nmstate_interfaces), len(nmstate_routes)))
+        else:
+            print("  ERROR creating NNCP %s: %s" % (nncp_name, err))
+            errors += 1
+
+    if errors > 0:
+        print("")
+        print("Completed with %d error(s)" % errors)
+        sys.exit(1)
+
+    print("")
+    nncp_names = ["roce-pf-config-host%d" % hosts[h] for h in sorted(hosts.keys())]
+    print("Waiting for NNCPs to be applied...")
+    all_ok = True
+    for name in nncp_names:
+        w = subprocess.run(
+            ["oc", "wait", "nncp/%s" % name,
+             "--for=condition=Available", "--timeout=180s"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        if w.returncode == 0:
+            print("  %s: Available" % name)
+        else:
+            print("  %s: WARNING - not yet Available (may still be applying)" % name)
+            print("    Check: oc get nncp %s" % name)
+            all_ok = False
+
+    print("")
+    if all_ok:
+        print("All NNCPs applied successfully")
+    else:
+        print("Some NNCPs still applying — check: oc get nncp ; oc get nnce")

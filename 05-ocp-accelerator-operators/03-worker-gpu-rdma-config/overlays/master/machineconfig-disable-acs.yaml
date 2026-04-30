@@ -1,0 +1,33 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-master-disable-pcie-acs
+  labels:
+    machineconfiguration.openshift.io/role: master
+spec:
+  config:
+    ignition:
+      version: "3.2.0"
+    systemd:
+      units:
+      - name: disable-pcie-acs.service
+        enabled: true
+        contents: |
+          [Unit]
+          Description=Disable PCIe ACS for GPUDirect RDMA P2P
+          After=multi-user.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/disable-pcie-acs.sh
+          RemainAfterExit=true
+
+          [Install]
+          WantedBy=multi-user.target
+    storage:
+      files:
+      - path: /usr/local/bin/disable-pcie-acs.sh
+        mode: 0755
+        overwrite: true
+        contents:
+          source: data:text/plain;charset=utf-8;base64,IyEvYmluL2Jhc2gKIyBEaXNhYmxlIFBDSWUgQWNjZXNzIENvbnRyb2wgU2VydmljZXMgb24gQUxMIGRldmljZXMgKGJyaWRnZXMgKyBlbmRwb2ludHMpLgojIFJlcXVpcmVkIGZvciBHUFVEaXJlY3QgUkRNQSBQMlAgd2hlbiBmaXJtd2FyZSBlbmFibGVzIEFDUyBhdCBQT1NULgojIEJhc2VkIG9uIE5WSURJQS1yZWNvbW1lbmRlZCBzY3JpcHQuIFRhcmdldHMgYWxsIFBDSSBkZXZpY2VzLCBub3QganVzdAojIGJyaWRnZXMsIGJlY2F1c2UgZW5kcG9pbnRzIChHUFVzLCBOSUNzKSBjYW4gYWxzbyBoYXZlIEFDUyBlbmFibGVkLgojIFRoZSBwY2k9bm9hY3Mga2VybmVsIGFyZyBwcmV2ZW50cyB0aGUga2VybmVsIGZyb20gZW5hYmxpbmcgQUNTLAojIGJ1dCBkb2VzIG5vdCBjbGVhciBBQ1MgYWxyZWFkeSBzZXQgYnkgQklPUy9maXJtd2FyZS4KZm9yIGJkZiBpbiAkKGxzcGNpIC1EIHwgYXdrICd7cHJpbnQgJDF9Jyk7IGRvCiAgdmFsPSQoc2V0cGNpIC1zICIkYmRmIiBFQ0FQX0FDUys2LncgMj4vZGV2L251bGwpIHx8IGNvbnRpbnVlCiAgaWYgWyAiJHZhbCIgIT0gIjAwMDAiIF07IHRoZW4KICAgIGxvZ2dlciAtdCBkaXNhYmxlLWFjcyAiRGlzYWJsaW5nIEFDUyBvbiAkYmRmICh3YXMgMHgkdmFsKSIKICAgIHNldHBjaSAtcyAiJGJkZiIgRUNBUF9BQ1MrNi53PTAwMDAKICAgIG5ld192YWw9JChzZXRwY2kgLXMgIiRiZGYiIEVDQVBfQUNTKzYudyAyPi9kZXYvbnVsbCkKICAgIGlmIFsgIiRuZXdfdmFsIiAhPSAiMDAwMCIgXTsgdGhlbgogICAgICBsb2dnZXIgLXQgZGlzYWJsZS1hY3MgIldBUk5JTkc6IGZhaWxlZCB0byBkaXNhYmxlIEFDUyBvbiAkYmRmIChzdGlsbCAweCRuZXdfdmFsKSIKICAgIGZpCiAgZmkKZG9uZQpsb2dnZXIgLXQgZGlzYWJsZS1hY3MgIlBDSWUgQUNTIGRpc2FibGUgY29tcGxldGUiCg==

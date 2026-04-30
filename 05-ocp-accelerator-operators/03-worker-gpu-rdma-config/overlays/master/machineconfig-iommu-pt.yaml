@@ -1,0 +1,10 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-master-gpu-rdma
+  labels:
+    machineconfiguration.openshift.io/role: master
+spec:
+  kernelArguments:
+  - iommu=pt
+  - pci=noacs

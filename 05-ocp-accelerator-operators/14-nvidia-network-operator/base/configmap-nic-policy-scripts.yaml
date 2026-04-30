@@ -107,32 +107,17 @@ data:
         pf_name = device['pfName']
         devices_by_ifname[pf_name].append(device)
 
-    config_list = []
-
-    for if_name in sorted(devices_by_ifname.keys()):
-        devices = devices_by_ifname[if_name]
-        device_ids = set()
-
-        for device in devices:
-            device_ids.add(device.get('deviceID', '1021'))
-
-        if if_name.startswith('ib_nic'):
-            nic_number = if_name.replace('ib_nic', '')
-            resource_name = f"rdma_shared_nic{nic_number}"
-        else:
-            resource_name = f"rdma_shared_{if_name}"
-
-        config_entry = {
-            "resourceName": resource_name,
-            "rdmaHcaMax": 1000,
+    if_names = sorted(devices_by_ifname.keys())
+    config_list = [
+        {
+            "resourceName": "shared_roce",
+            "rdmaHcaMax": 100,
             "selectors": {
                 "vendors": ["15b3"],
-                "deviceIDs": list(device_ids),
-                "ifNames": [if_name]
-            }
+                "ifNames": if_names,
+            },
         }
-
-        config_list.append(config_entry)
+    ]
 
     rdma_config_json = json.dumps({"configList": config_list}, indent=2)
 
@@ -162,9 +147,7 @@ data:
 
     if result.returncode == 0:
         print("NicClusterPolicy patched successfully")
-        for entry in config_list:
-            if_name = entry['selectors']['ifNames'][0]
-            print(f"  - rdma/{entry['resourceName']} ({if_name}): 1000 per NIC")
+        print(f"  - rdma/shared_roce: {len(if_names)} PFs in pool, rdmaHcaMax=100")
     else:
         print(f"Failed to patch NicClusterPolicy: {result.stderr}")
         sys.exit(1)

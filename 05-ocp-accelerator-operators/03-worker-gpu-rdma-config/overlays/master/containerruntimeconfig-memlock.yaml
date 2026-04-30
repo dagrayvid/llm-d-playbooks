@@ -1,0 +1,13 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: ContainerRuntimeConfig
+metadata:
+  name: master-rdma-memlock
+spec:
+  machineConfigPoolSelector:
+    matchLabels:
+      pools.operator.machineconfiguration.openshift.io/master: ""
+  containerRuntimeConfig:
+    defaultUlimits:
+    - name: memlock
+      soft: -1
+      hard: -1

@@ -1,0 +1,10 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-worker-gpu-rdma
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  kernelArguments:
+  - iommu=pt
+  - pci=noacs

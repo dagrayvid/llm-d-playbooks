@@ -125,6 +125,18 @@ wait_for_subscription "nvidia-network-operator" "nvidia-network-operator" 300
 # Step 02: Deploy NFD operands
 apply_step "02-nfd-operands" "$SCRIPT_DIR/02-nfd-operands/base"
 
+# Step 03: Worker node GPU/RDMA config (bare metal only)
+# Sets iommu=pt (required for GPUDirect RDMA — allows NIC↔GPU P2P DMA)
+# Sets pci=noacs (disables ACS so P2P routes directly through PCIe switch)
+# Sets unlimited memlock (required for RDMA memory registration)
+# MachineConfig 98-worker-roce-pf-mtu: NM dispatcher sets RoCE PF MTU 9000 (ens*f0np0 / mlx5)
+if [ "$PLATFORM" = "bare-metal-ib" ] || [ "$PLATFORM" = "bare-metal-roce" ]; then
+  apply_step "03-worker-gpu-rdma-config" "$SCRIPT_DIR/03-worker-gpu-rdma-config/base"
+  echo "  Waiting for MachineConfigPool to update (nodes will reboot)..."
+  oc wait mcp worker --for=condition=Updated --timeout=1800s 2>/dev/null || echo "  MCP wait timed out or not applicable"
+  echo ""
+fi
+
 # Step 10: SR-IOV operator (RoCE only)
 if [ "$PLATFORM" = "bare-metal-roce" ]; then
   apply_step "10-sriov-operator" "$SCRIPT_DIR/10-sriov-operator/base"
@@ -158,11 +170,16 @@ else
   apply_step "14-nvidia-network-operator" "$SCRIPT_DIR/14-nvidia-network-operator/base"
 fi
 
-# Step 15: IBM Cloud networking (host-device NADs, MachineConfig, sbr-custom)
+# Step 15: Platform-specific networking
 if [ "$PLATFORM" = "ibm-cloud" ]; then
   apply_step "15-ibm-cloud-networking" "$SCRIPT_DIR/15-ibm-cloud-networking/base"
   echo "  Waiting for MachineConfigPool to update (nodes may reboot)..."
   oc wait mcp gpu-h100 --for=condition=Updated --timeout=1800s 2>/dev/null || echo "  MCP wait timed out or not applicable"
+  echo ""
+elif [ "$PLATFORM" = "bare-metal-roce" ]; then
+  apply_step "15-roce-macvlan" "$SCRIPT_DIR/15-roce-macvlan/base"
+  echo "  Waiting for macvlan configuration job to complete..."
+  oc wait --for=condition=complete job/configure-macvlan-networks -n nvidia-network-operator --timeout=300s 2>/dev/null || true
   echo ""
 fi
 
@@ -186,6 +203,11 @@ echo ""
 echo "Verify network operator status:"
 echo "  oc get nicclusterpolicy"
 echo "  oc get pods -n nvidia-network-operator"
+if [ "$PLATFORM" = "bare-metal-roce" ]; then
+  echo ""
+  echo "Verify RoCE macvlan NADs:"
+  echo "  oc get net-attach-def -n openshift-multus"
+fi
 if [ "$PLATFORM" = "ibm-cloud" ]; then
   echo ""
   echo "Verify IBM Cloud networking:"

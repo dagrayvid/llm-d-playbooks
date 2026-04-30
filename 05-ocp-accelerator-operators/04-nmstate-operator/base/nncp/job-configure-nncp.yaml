@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nmstate-nncp-configurator
+  namespace: openshift-nmstate
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nmstate-nncp-configurator
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]
+- apiGroups: ["nmstate.io"]
+  resources: ["nodenetworkconfigurationpolicies"]
+  verbs: ["get", "list", "create", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nmstate-nncp-configurator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nmstate-nncp-configurator
+subjects:
+- kind: ServiceAccount
+  name: nmstate-nncp-configurator
+  namespace: openshift-nmstate
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: configure-roce-pf-networking
+  namespace: openshift-nmstate
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: nmstate-nncp-configurator
+    spec:
+      serviceAccountName: nmstate-nncp-configurator
+      restartPolicy: OnFailure
+      containers:
+      - name: configurator
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        env:
+        - name: MTU
+          value: "9000"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "=== RoCE PF Configurator (MTU + IP + routes via NMState NNCP) ==="
+          echo ""
+
+          if ! oc get configmap network-mapping -n llm-d-setup &>/dev/null; then
+            echo "ERROR: network-mapping ConfigMap not found in llm-d-setup namespace"
+            echo "Create it with rail/host mapping before running this job"
+            exit 1
+          fi
+
+          oc get configmap network-mapping -n llm-d-setup \
+            -o jsonpath='{.data.mapping\.json}' > /tmp/network-mapping.json
+
+          python3 /scripts/generate-nncp.py
+
+          echo ""
+          echo "=== RoCE PF configuration complete ==="
+        volumeMounts:
+          - name: scripts
+            mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: nmstate-nncp-scripts
+            defaultMode: 0755
