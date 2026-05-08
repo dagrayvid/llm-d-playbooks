@@ -1,5 +1,10 @@
 # RoCE Macvlan + RDMA Shared Device Plugin
 
+> **WARNING:** We observed consistent RoCE failures when multiple pods with macvlan
+> interfaces share the same node. See [Macvlan RoCE Multi-Pod Observations](#macvlan-roce-multi-pod-observations)
+> below. We are switching to SR-IOV (Step 13) for P/D deployments while investigation
+> continues.
+
 Configures RoCE networking using macvlan CNI and the RDMA Shared Device Plugin,
 as an alternative to SR-IOV. Every pod sees every physical NIC and its RDMA device;
 NCCL/UCX handles topological GPU-NIC pairing automatically.
@@ -96,3 +101,79 @@ ib_write_bw -d <device> --report_gbits
 # Pod 1:
 ib_write_bw -d <device> <pod0-ip> --report_gbits
 ```
+
+---
+
+## Macvlan RoCE Multi-Pod Failure
+
+### Summary
+
+We observed consistent RoCE failures (`Transport retry count exceeded`) when
+multiple pods with macvlan interfaces are present on the same node. This
+occurred even when the additional pod performed no RDMA activity (`sleep
+infinity` with macvlan network attachments only).
+
+The NVIDIA Network Operator documentation does show macvlan + RDMA shared device
+plugin as a supported configuration. The difference between our setup and the
+documented examples is unclear — it may involve BlueField-3 SuperNIC-specific
+behavior, GID table handling with many interfaces per PF, or switch/NIC
+interaction unique to our environment. Investigation is ongoing.
+
+### What We Observed
+
+**Environment:** BlueField-3 SuperNICs (device `0xa2dc`), 10 PFs per node, each
+with a macvlan `NetworkAttachmentDefinition`, `nv-ipam` CIDRPool IPAM, and
+`rdma/shared_roce` resource. Two worker nodes.
+
+**Test tool:** `ucx_perftest` (from `ghcr.io/llm-d/llm-d-cuda:v0.6.0`, UCX 1.20.0)
+in two pods with `podAntiAffinity` (one per node):
+
+```bash
+# Server pod:
+UCX_NET_DEVICES=mlx5_0:1 UCX_TLS=rc_mlx5,ud_mlx5,self UCX_IB_TRAFFIC_CLASS=0 \
+  ucx_perftest -t tag_bw -s 4194304 -n 100000 -w 64
+
+# Client pod:
+UCX_NET_DEVICES=mlx5_0:1 UCX_TLS=rc_mlx5,ud_mlx5,self UCX_IB_TRAFFIC_CLASS=0 \
+  ucx_perftest <server-ip> -t tag_bw -s 4194304 -n 100000 -w 64
+```
+
+**With only the two ucx-perftest pods deployed (one per node):**
+- 45 GB/s (363 Gb/s) sustained for 100K iterations on a single 400GbE NIC
+- No errors, no retries
+
+**After deploying an additional pod with macvlan interfaces on the same node**
+(even a dummy pod running `sleep infinity` with no RDMA activity):
+- Failure: `Transport retry count exceeded on mlx5_X:1/RoCE`
+- Affected all mlx5 devices, not just the one shared with the additional pod
+- `local_ack_timeout_err` NIC counter incremented — RDMA READ responses were
+  never received by the initiator
+
+**After removing the additional pod:** failure persisted until the ucx-perftest
+pods themselves were deleted and recreated (new macvlan interfaces, new GIDs).
+
+### Why `ib_write_bw` Did Not Exhibit This
+
+`ib_write_bw` uses one-sided RDMA WRITE (data flows in one direction; remote
+NIC is passive). This achieved 390+ Gb/s even with multiple macvlan pods on the
+same node.
+
+UCX's rendezvous protocol uses **RDMA READ** (receiver actively reads from
+sender's memory). The failure only occurred with this bidirectional RDMA pattern.
+
+### UCX Build Issue (Separate)
+
+During testing we also discovered that the Red Hat UBI vLLM image
+(`registry.stage.redhat.io/rhaii/vllm-cuda-rhel9`) ships UCX 1.19.1 built with
+`--disable-optimizations`, which caused ~1000x performance degradation (~0.6
+MB/s instead of ~14 GB/s for 65KB messages). A colleague with a different RoCE
+cluster did NOT reproduce this degradation with the same image, so the
+interaction may be environment-specific. The upstream image
+(`ghcr.io/llm-d/llm-d-cuda:v0.6.0`, UCX 1.20.0) performs correctly. This UCX
+issue is separate from the multi-pod macvlan failure.
+
+### Current Status
+
+We are switching to SR-IOV (Steps 10 + 13) to provide hardware-level VF
+isolation per pod. The macvlan configuration remains in this directory for
+reference and for single-pod-per-node use cases where it works correctly.

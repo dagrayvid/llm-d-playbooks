@@ -1,0 +1,19 @@
+apiVersion: configuration.net.nvidia.com/v1alpha1
+kind: NicConfigurationTemplate
+metadata:
+  name: roce-qos-config
+  namespace: nvidia-network-operator
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+  nicSelector:
+    nicType: "a2dc"
+  template:
+    numVfs: 0
+    linkType: Ethernet
+    pciPerformanceOptimized:
+      enabled: true
+    roceOptimized:
+      enabled: true
+    gpuDirectOptimized:
+      enabled: true

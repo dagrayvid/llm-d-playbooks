@@ -1,0 +1,212 @@
+# Minimal P/D deployment: relies entirely on:
+#   - nv-ipam CIDRPool routes (per-interface /16 via per-node gateway)
+#   - KServe KSERVE_INFER_ROCE=true (discovers all active HCAs + RoCEv2 GID index)
+# No custom scripts, no SCC, no NET_ADMIN, no sbr-custom.
+---
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: pd-minimal
+spec:
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "llmd-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-9", "namespace": "openshift-multus"}
+      ]
+  model:
+    name: Qwen/Qwen3-0.6B
+    uri: hf://Qwen/Qwen3-0.6B
+  labels:
+    benchmarks.llm-d.io/pd-role: decode
+  prefill:
+    annotations:
+      k8s.v1.cni.cncf.io/networks: |
+        [
+          {"name": "llmd-roce-net-0", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-1", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-2", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-3", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-4", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-5", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-6", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-7", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-8", "namespace": "openshift-multus"},
+          {"name": "llmd-roce-net-9", "namespace": "openshift-multus"}
+        ]
+    labels:
+      benchmarks.llm-d.io/pd-role: prefill
+    replicas: 2
+    template:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: benchmarks.llm-d.io/pd-role
+                operator: In
+                values:
+                - decode
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - env:
+        - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: VLLM_ADDITIONAL_ARGS
+          value: --block-size 128 --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+        - name: KSERVE_INFER_ROCE
+          value: 'true'
+        #- name: UCX_NET_DEVICES
+        #  value: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_11:1,mlx5_12:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+        - name: UCX_IB_TRAFFIC_CLASS
+          value: '0'
+        - name: TRITON_PTXAS_BLACKWELL_PATH
+          value: /usr/local/cuda/bin/ptxas
+        - name: NIXL_LOG_LEVEL
+          value: debug
+        - name: UCX_LOG_LEVEL
+          value: debug
+        image: ghcr.io/llm-d/llm-d-cuda:v0.6.0
+        ports:
+        - containerPort: 5600
+          name: nixl
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 30
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 60
+        name: main
+        resources:
+          limits:
+            cpu: '4'
+            memory: 64Gi
+            nvidia.com/gpu: '1'
+            rdma/shared_roce: 1
+          requests:
+            cpu: '2'
+            memory: 16Gi
+            nvidia.com/gpu: '1'
+            rdma/shared_roce: 1
+        volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+      imagePullSecrets:
+      - name: rhai-pull-secret
+      volumes:
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+  replicas: 2
+  router:
+    gateway: {}
+    route: {}
+    scheduler:
+      template:
+        containers:
+        - name: main
+          resources: {}
+        - name: tokenizer
+          resources: {}
+        imagePullSecrets:
+        - name: rhai-pull-secret
+  template:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: benchmarks.llm-d.io/pd-role
+              operator: In
+              values:
+              - prefill
+          topologyKey: kubernetes.io/hostname
+    containers:
+    - env:
+      - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
+      - name: VLLM_ADDITIONAL_ARGS
+        value: --block-size 128 --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      - name: KSERVE_INFER_ROCE
+        value: 'true'
+      #- name: UCX_NET_DEVICES
+      #  value: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_11:1,mlx5_12:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+      - name: UCX_IB_TRAFFIC_CLASS
+        value: '0'
+      - name: TRITON_PTXAS_BLACKWELL_PATH
+        value: /usr/local/cuda/bin/ptxas
+      - name: NIXL_LOG_LEVEL
+        value: debug
+      - name: UCX_LOG_LEVEL
+        value: debug
+      image: ghcr.io/llm-d/llm-d-cuda:v0.6.0
+      ports:
+      - containerPort: 5600
+        name: nixl
+        protocol: TCP
+      livenessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+          scheme: HTTPS
+        initialDelaySeconds: 120
+        periodSeconds: 30
+        timeoutSeconds: 30
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8000
+          scheme: HTTPS
+        initialDelaySeconds: 15
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 60
+      name: main
+      resources:
+        limits:
+          cpu: '4'
+          memory: 64Gi
+          nvidia.com/gpu: '1'
+          rdma/shared_roce: 1
+        requests:
+          cpu: '2'
+          memory: 16Gi
+          nvidia.com/gpu: '1'
+          rdma/shared_roce: 1
+      volumeMounts:
+      - name: shm
+        mountPath: /dev/shm
+    imagePullSecrets:
+    - name: rhai-pull-secret
+    volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 16Gi

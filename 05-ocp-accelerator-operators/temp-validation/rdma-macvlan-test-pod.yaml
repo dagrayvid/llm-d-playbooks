@@ -1,0 +1,103 @@
+# Test pods for RDMA Shared Device Plugin + macvlan RoCE validation.
+# Each pod gets:
+#   - 8 GPUs
+#   - 10 macvlan interfaces (one per RoCE PF, with IP from NV-IPAM)
+#   - One pooled RDMA allocation (rdma/shared_roce) exposing all HCAs in the pool
+# The pod sees all PFs and their RDMA devices; NCCL/UCX picks the
+# topologically optimal NIC for each GPU automatically.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-macvlan-test-0
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "llmd-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-9", "namespace": "openshift-multus"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: quay.io/dagray/rdma-tools:tiny
+    imagePullPolicy: Always
+    command: ["sleep", "infinity"]
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: "all"
+    resources:
+      requests:
+        nvidia.com/gpu: "8"
+        rdma/shared_roce: "1"
+      limits:
+        nvidia.com/gpu: "8"
+        rdma/shared_roce: "1"
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-macvlan-test-1
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "llmd-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "llmd-roce-net-9", "namespace": "openshift-multus"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-2.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: quay.io/dagray/rdma-tools:tiny
+    imagePullPolicy: Always
+    command: ["sleep", "infinity"]
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: "all"
+    resources:
+      requests:
+        nvidia.com/gpu: "8"
+        rdma/shared_roce: "1"
+      limits:
+        nvidia.com/gpu: "8"
+        rdma/shared_roce: "1"
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi

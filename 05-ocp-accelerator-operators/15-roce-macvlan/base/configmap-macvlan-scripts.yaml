@@ -110,6 +110,9 @@ data:
                 "cidr": "172.%d.0.0/16" % second_octet,
                 "perNodeNetworkPrefix": 24,
                 "gatewayIndex": gw_octet,
+                "routes": [
+                    {"dst": "172.%d.0.0/16" % second_octet}
+                ],
                 "nodeSelector": {
                     "nodeSelectorTerms": [{
                         "matchExpressions": [{
@@ -145,10 +148,6 @@ data:
                     "poolName": pool_name,
                     "poolType": "cidrpool"
                 }
-            },
-            {
-                "type": "sbr-custom",
-                "addSourceHints": True
             }
         ]
 

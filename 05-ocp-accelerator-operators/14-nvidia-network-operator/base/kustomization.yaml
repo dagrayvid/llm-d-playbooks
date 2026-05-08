@@ -4,3 +4,4 @@ namespace: nvidia-network-operator
 resources:
   - configmap-nic-policy-scripts.yaml
   - job-configure-nic-policy.yaml
+  - nicconfigurationtemplate-roce.yaml

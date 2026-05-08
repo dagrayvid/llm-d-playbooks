@@ -113,6 +113,28 @@ spec:
           fi
 
           echo ""
+
+          # --- Phase 3: Enable NIC Configuration Operator for RoCE QoS ---
+          echo "--- Phase 3: NIC Configuration Operator ---"
+
+          # Extract operator version from CSV name (e.g., nvidia-network-operator.v26.1.0 -> v26.1.0)
+          OP_VERSION=$(echo "$CSV_NAME" | grep -oP 'v\d+\.\d+\.\d+' || echo "")
+          if [ -n "$OP_VERSION" ]; then
+            NIC_CONF_VERSION="network-operator-${OP_VERSION}"
+            echo "Enabling nicConfigurationOperator with version: $NIC_CONF_VERSION"
+            PATCH=$(cat <<EOFPATCH
+          {"spec":{"nicConfigurationOperator":{"image":"nic-configuration-operator","repository":"nvcr.io/nvidia/mellanox","version":"${NIC_CONF_VERSION}"}}}
+          EOFPATCH
+            )
+            oc patch nicclusterpolicy nic-cluster-policy \
+              --type=merge -p "$PATCH" && \
+              echo "nicConfigurationOperator enabled" || \
+              echo "WARNING: Failed to enable nicConfigurationOperator"
+          else
+            echo "WARNING: Could not determine operator version - skipping nicConfigurationOperator"
+          fi
+
+          echo ""
           echo "=== NicClusterPolicy configuration complete ==="
         volumeMounts:
           - name: scripts
