@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/15-ibm-cloud-networking/base
+    path: 05-ocp-accelerator-operators/ibm-cloud-vpc/15-networking
   project: default
   syncPolicy:
     automated:

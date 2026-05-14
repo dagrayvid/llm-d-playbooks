@@ -15,10 +15,10 @@ spec:
     # UPDATE: Set this to your fork's URL and the appropriate overlay path
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    # Choose the overlay that matches your hardware:
-    #   bare-metal-ib   - InfiniBand clusters
-    #   bare-metal-roce - RoCE clusters (or mixed IB+RoCE)
-    #   ibm-cloud       - IBM Cloud (GPU only, no RDMA)
+    # Choose the overlay that matches your case study:
+    #   bare-metal-roce - Dell B200 + BlueField-3 (RoCE, macvlan)
+    #   ibm-cloud       - IBM Cloud VPC (host-device CNI)
+    #   bare-metal-ib   - InfiniBand clusters (legacy)
     path: 05-ocp-accelerator-operators/argocd/overlays/bare-metal-roce
     kustomize:
       patches:

@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/02-nfd-operands/base
+    path: 05-ocp-accelerator-operators/common/02-nfd-operands
   project: default
   syncPolicy:
     automated:

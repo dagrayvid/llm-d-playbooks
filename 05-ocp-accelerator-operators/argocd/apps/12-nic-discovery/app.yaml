@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/12-nic-discovery/base
+    path: 05-ocp-accelerator-operators/bare-metal-dell-b200-bf3/12-nic-discovery
   project: default
   syncPolicy:
     automated:

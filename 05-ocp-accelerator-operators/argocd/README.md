@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory provides an optional ArgoCD app-of-apps pattern for deploying all accelerator operators via GitOps. A root Application deploys child Application resources, each pointing to a step's `base/` manifests.
+This directory provides an optional ArgoCD app-of-apps pattern for deploying accelerator operators via GitOps. A root Application deploys child Application resources, each pointing to a step in the selected case study or `common/` directory.
 
 ## Quick Start
 
@@ -28,10 +28,10 @@ EOF
 
 Edit `bootstrap/root-app.yaml`:
 - Set `spec.source.repoURL` to your fork's URL
-- Set `spec.source.path` to the overlay matching your platform:
-  - `05-ocp-accelerator-operators/argocd/overlays/bare-metal-ib/`
-  - `05-ocp-accelerator-operators/argocd/overlays/bare-metal-roce/`
-  - `05-ocp-accelerator-operators/argocd/overlays/ibm-cloud/`
+- Set `spec.source.path` to the overlay matching your case study:
+  - `05-ocp-accelerator-operators/argocd/overlays/bare-metal-roce/` — Dell B200 + BlueField-3
+  - `05-ocp-accelerator-operators/argocd/overlays/ibm-cloud/` — IBM Cloud VPC
+  - `05-ocp-accelerator-operators/argocd/overlays/bare-metal-ib/` — InfiniBand (legacy)
 
 ### 3. Apply Bootstrap
 
@@ -47,9 +47,9 @@ This creates:
 
 Each overlay's `kustomization.yaml` selects which ArgoCD Application resources to deploy:
 
-- **bare-metal-ib**: Skips SR-IOV operator (step 10) and VF config (step 12)
-- **bare-metal-roce**: Includes all steps including SR-IOV
-- **ibm-cloud**: Only operators and GPU operands (no RDMA stack)
+- **bare-metal-roce**: Maps to `bare-metal-dell-b200-bf3/` case study — includes SR-IOV, NIC discovery, macvlan + SBR
+- **ibm-cloud**: Maps to `ibm-cloud-vpc/` case study — operators + IBM Cloud networking (host-device + SBR)
+- **bare-metal-ib**: Legacy InfiniBand overlay — skips SR-IOV and VF config
 
 ## Customization
 

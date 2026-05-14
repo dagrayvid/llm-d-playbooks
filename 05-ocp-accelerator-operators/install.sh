@@ -2,47 +2,48 @@
 # Automated installation of OCP accelerator operators.
 #
 # Usage:
-#   ./install.sh --platform <bare-metal-ib|bare-metal-roce|ibm-cloud>
+#   ./install.sh --case-study <ibm-cloud-vpc|bare-metal-dell-b200-bf3>
 #
-# This script applies the manifests in order, waits for readiness
-# between steps, and skips steps that don't apply to the platform.
+# Each case study has its own ordered set of steps. This script applies
+# them sequentially, waiting for readiness between steps.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  echo "Usage: $0 --platform <bare-metal-ib|bare-metal-roce|ibm-cloud>"
+  echo "Usage: $0 --case-study <ibm-cloud-vpc|bare-metal-dell-b200-bf3>"
   echo ""
-  echo "Platforms:"
-  echo "  bare-metal-ib    InfiniBand clusters (no SR-IOV)"
-  echo "  bare-metal-roce  RoCE clusters (with SR-IOV)"
-  echo "  ibm-cloud        IBM Cloud (host-device CNI, no SR-IOV)"
+  echo "Case studies:"
+  echo "  ibm-cloud-vpc                IBM Cloud VPC bare-metal workers (host-device CNI)"
+  echo "  bare-metal-dell-b200-bf3     Dell MX750c, B200 GPUs, BlueField-3 (macvlan + RoCE)"
   exit 1
 }
 
-PLATFORM=""
+CASE_STUDY=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --platform) PLATFORM="$2"; shift 2 ;;
+    --case-study) CASE_STUDY="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
 
-if [ -z "$PLATFORM" ]; then
-  echo "ERROR: --platform is required"
+if [ -z "$CASE_STUDY" ]; then
+  echo "ERROR: --case-study is required"
   usage
 fi
 
-case "$PLATFORM" in
-  bare-metal-ib|bare-metal-roce|ibm-cloud) ;;
-  *) echo "ERROR: Unknown platform '$PLATFORM'"; usage ;;
+case "$CASE_STUDY" in
+  ibm-cloud-vpc|bare-metal-dell-b200-bf3) ;;
+  *) echo "ERROR: Unknown case study '$CASE_STUDY'"; usage ;;
 esac
+
+CASE_DIR="$SCRIPT_DIR/$CASE_STUDY"
 
 echo "=========================================="
 echo "OCP Accelerator Operators Installation"
-echo "Platform: $PLATFORM"
+echo "Case study: $CASE_STUDY"
 echo "=========================================="
 echo ""
 
@@ -106,16 +107,18 @@ wait_for_subscription() {
   echo "  WARNING: Subscription not ready after ${timeout}s, continuing..."
 }
 
+# =========================================================================
+# Common steps (shared across case studies)
+# =========================================================================
+
 # Step 00: Discover GPUs & NICs (informational)
-if [ "$PLATFORM" != "ibm-cloud" ]; then
-  echo "--- Step: 00-discover-gpus-nics ---"
-  echo "  Running hardware probe..."
-  bash "$SCRIPT_DIR/00-discover-gpus-nics/discover-gpu-nic-topology.sh" || true
-  echo ""
-fi
+echo "--- Step: 00-discover-gpus-nics ---"
+echo "  Running hardware probe..."
+bash "$SCRIPT_DIR/common/00-discover-gpus-nics/discover-gpu-nic-topology.sh" || true
+echo ""
 
 # Step 01: Install NFD, GPU, and Network Operator subscriptions
-apply_step "01-operators-nfd-gpu" "$SCRIPT_DIR/01-operators-nfd-gpu/base"
+apply_step "01-operator-subscriptions" "$CASE_DIR/01-operator-subscriptions"
 
 echo "Waiting for operator subscriptions to install..."
 wait_for_subscription "openshift-nfd" "nfd" 300
@@ -123,74 +126,72 @@ wait_for_subscription "nvidia-gpu-operator" "gpu-operator-certified" 300
 wait_for_subscription "nvidia-network-operator" "nvidia-network-operator" 300
 
 # Step 02: Deploy NFD operands
-apply_step "02-nfd-operands" "$SCRIPT_DIR/02-nfd-operands/base"
+apply_step "02-nfd-operands" "$CASE_DIR/02-nfd-operands"
 
-# Step 03: Worker node GPU/RDMA config (bare metal only)
-# Sets iommu=pt (required for GPUDirect RDMA — allows NIC↔GPU P2P DMA)
-# Sets pci=noacs (disables ACS so P2P routes directly through PCIe switch)
-# Sets unlimited memlock (required for RDMA memory registration)
-# MachineConfig 98-worker-roce-pf-mtu: NM dispatcher sets RoCE PF MTU 9000 (ens*f0np0 / mlx5)
-if [ "$PLATFORM" = "bare-metal-ib" ] || [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "03-worker-gpu-rdma-config" "$SCRIPT_DIR/03-worker-gpu-rdma-config/base"
+# =========================================================================
+# Case-study-specific steps
+# =========================================================================
+
+if [ "$CASE_STUDY" = "bare-metal-dell-b200-bf3" ]; then
+
+  # Step 03: Worker node GPU/RDMA config (iommu=pt, ACS disable, memlock)
+  apply_step "03-worker-gpu-rdma-config" "$CASE_DIR/03-worker-gpu-rdma-config/base"
   echo "  Waiting for MachineConfigPool to update (nodes will reboot)..."
   oc wait mcp worker --for=condition=Updated --timeout=1800s 2>/dev/null || echo "  MCP wait timed out or not applicable"
   echo ""
-fi
 
-# Step 10: SR-IOV operator (RoCE only)
-if [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "10-sriov-operator" "$SCRIPT_DIR/10-sriov-operator/base"
+  # Step 10: SR-IOV operator
+  apply_step "10-sriov-operator" "$CASE_DIR/10-sriov-operator"
   wait_for_subscription "openshift-sriov-network-operator" "sriov-network-operator-subscription" 300
-fi
 
-# Step 11: IB interface normalization (bare metal only)
-if [ "$PLATFORM" = "bare-metal-ib" ] || [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "11-ib-interface-normalization" "$SCRIPT_DIR/11-ib-interface-normalization/base"
+  # Step 11: IB interface normalization (optional)
+  apply_step "11-ib-interface-normalization" "$CASE_DIR/11-ib-interface-normalization"
   echo "  Waiting for MachineConfigPool to update (nodes may reboot)..."
   oc wait mcp worker --for=condition=Updated --timeout=1800s 2>/dev/null || echo "  MCP wait timed out or not applicable"
   echo ""
-fi
 
-# Step 12: NIC discovery (bare metal only)
-if [ "$PLATFORM" = "bare-metal-ib" ] || [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "12-nic-discovery" "$SCRIPT_DIR/12-nic-discovery/base"
+  # Step 12: NIC discovery
+  apply_step "12-nic-discovery" "$CASE_DIR/12-nic-discovery"
   echo "  Waiting for discovery DaemonSet to complete..."
   sleep 60
-fi
 
-# Step 13: SR-IOV VF config (RoCE only — requires Step 12 discovery data)
-if [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "13-sriov-vf-config" "$SCRIPT_DIR/13-sriov-vf-config/base"
-fi
+  # Step 13: SR-IOV VF config
+  apply_step "13-sriov-vf-config" "$CASE_DIR/13-sriov-vf-config"
 
-# Step 14: NVIDIA network operator config
-if [ "$PLATFORM" = "ibm-cloud" ]; then
-  apply_step "14-nvidia-network-operator (ibm-cloud)" "$SCRIPT_DIR/14-nvidia-network-operator/overlays/ibm-cloud"
-else
-  apply_step "14-nvidia-network-operator" "$SCRIPT_DIR/14-nvidia-network-operator/base"
-fi
+  # Step 14: NVIDIA network operator config
+  apply_step "14-nvidia-network-operator" "$CASE_DIR/14-nvidia-network-operator"
 
-# Step 15: Platform-specific networking
-if [ "$PLATFORM" = "ibm-cloud" ]; then
-  apply_step "15-ibm-cloud-networking" "$SCRIPT_DIR/15-ibm-cloud-networking/base"
-  echo "  Waiting for MachineConfigPool to update (nodes may reboot)..."
-  oc wait mcp gpu-h100 --for=condition=Updated --timeout=1800s 2>/dev/null || echo "  MCP wait timed out or not applicable"
-  echo ""
-elif [ "$PLATFORM" = "bare-metal-roce" ]; then
-  apply_step "15-roce-macvlan" "$SCRIPT_DIR/15-roce-macvlan/base"
+  # Step 15: RoCE macvlan + SBR
+  apply_step "15-roce-macvlan" "$CASE_DIR/15-roce-macvlan/base"
   echo "  Waiting for macvlan configuration job to complete..."
   oc wait --for=condition=complete job/configure-macvlan-networks -n nvidia-network-operator --timeout=300s 2>/dev/null || true
   echo ""
+
+elif [ "$CASE_STUDY" = "ibm-cloud-vpc" ]; then
+
+  # Step 14: NVIDIA network operator config (IBM Cloud — MOFED only)
+  apply_step "14-nvidia-network-operator" "$CASE_DIR/14-nvidia-network-operator"
+
+  # Step 15: IBM Cloud networking (IOMMU MachineConfig + SBR + NADs)
+  apply_step "15-networking" "$CASE_DIR/15-networking"
+  echo "  Waiting for MachineConfigPool to update (nodes may reboot)..."
+  oc wait mcp gpu-h100 --for=condition=Updated --timeout=1800s 2>/dev/null || echo "  MCP wait timed out or not applicable"
+  echo ""
+
 fi
 
+# =========================================================================
+# Common steps (post-networking)
+# =========================================================================
+
 # Step 20: Wait for operator readiness
-apply_step "20-operators-gpu-readiness" "$SCRIPT_DIR/20-operators-gpu-readiness/base"
+apply_step "20-gpu-readiness" "$CASE_DIR/20-gpu-readiness"
 echo "  Waiting for readiness jobs to complete..."
 oc wait --for=condition=complete job/wait-for-network-operator-ready -n llm-d-setup --timeout=1800s 2>/dev/null || true
 oc wait --for=condition=complete job/wait-for-mofed-ready -n llm-d-setup --timeout=1800s 2>/dev/null || true
 
 # Step 21: Deploy GPU operands
-apply_step "21-gpu-operands" "$SCRIPT_DIR/21-gpu-operands/base"
+apply_step "21-gpu-operands" "$CASE_DIR/21-gpu-operands"
 
 echo "=========================================="
 echo "Installation Complete"
@@ -203,12 +204,12 @@ echo ""
 echo "Verify network operator status:"
 echo "  oc get nicclusterpolicy"
 echo "  oc get pods -n nvidia-network-operator"
-if [ "$PLATFORM" = "bare-metal-roce" ]; then
+if [ "$CASE_STUDY" = "bare-metal-dell-b200-bf3" ]; then
   echo ""
   echo "Verify RoCE macvlan NADs:"
   echo "  oc get net-attach-def -n openshift-multus"
 fi
-if [ "$PLATFORM" = "ibm-cloud" ]; then
+if [ "$CASE_STUDY" = "ibm-cloud-vpc" ]; then
   echo ""
   echo "Verify IBM Cloud networking:"
   echo "  oc get mcp gpu-h100"

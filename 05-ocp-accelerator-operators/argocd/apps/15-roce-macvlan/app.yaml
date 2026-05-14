@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/13-roce-macvlan/base
+    path: 05-ocp-accelerator-operators/bare-metal-dell-b200-bf3/15-roce-macvlan/base
   project: default
   syncPolicy:
     automated:

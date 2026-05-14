@@ -16,7 +16,7 @@ spec:
     # UPDATE: Set this to your fork's URL
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/01-operators-nfd-gpu/base
+    path: 05-ocp-accelerator-operators/common/01-operator-subscriptions
   project: default
   syncPolicy:
     automated:

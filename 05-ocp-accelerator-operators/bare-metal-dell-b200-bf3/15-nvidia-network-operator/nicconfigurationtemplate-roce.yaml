@@ -1,0 +1,38 @@
+apiVersion: configuration.net.nvidia.com/v1alpha1
+kind: NicConfigurationTemplate
+metadata:
+  name: roce-qos-config
+  namespace: nvidia-network-operator
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+  nicSelector:
+    nicType: "a2dc"
+    pciAddresses:
+      # dell-b200-1 SuperNICs
+      - "0000:18:00.0"  # ens40f0np0 rail 0
+      - "0000:1a:00.0"  # ens42f0np0 rail 8
+      - "0000:3a:00.0"  # ens41f0np0 rail 1
+      - "0000:4d:00.0"  # ens38f0np0 rail 2
+      - "0000:5d:00.0"  # ens37f0np0 rail 3
+      - "0000:9b:00.0"  # ens32f0np0 rail 4
+      - "0000:ba:00.0"  # ens31f0np0 rail 5
+      - "0000:ca:00.0"  # ens36f0np0 rail 6
+      - "0000:cc:00.0"  # ens34f0np0 rail 9
+      - "0000:db:00.0"  # ens35f0np0 rail 7
+  template:
+    numVfs: 16
+    linkType: Ethernet
+    pciPerformanceOptimized:
+      enabled: true
+    roceOptimized:
+      enabled: true
+      qos:
+        trust: pcp
+        pfc: "1,1,1,1,1,1,1,1"
+    gpuDirectOptimized:
+      enabled: true
+      env: Baremetal
+    rawNvConfig:
+      - name: ROCE_CC_PRIO_MASK_P1
+        value: "0"

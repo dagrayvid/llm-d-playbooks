@@ -1,0 +1,267 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nic-resource-generator-script
+  namespace: llm-d-setup
+data:
+  generate_nic_resources.py: |
+    """Generate SR-IOV resources with nv-ipam CIDRPools for L3 routed RoCE.
+
+    Reads NIC discovery data + network-mapping.json and produces:
+      - One SriovNetworkNodePolicy per PF (applied to all nodes with that PF)
+      - One nv-ipam CIDRPool per rail (same L3 formula as macvlan setup)
+      - One SriovNetwork per rail (creates NAD named sriov-roce-net-N)
+    """
+    import json
+    import sys
+    import os
+    import glob
+    from collections import defaultdict
+
+    discovery_dir = os.getenv('DISCOVERY_DIR', '/discovery')
+    output_dir = os.getenv('OUTPUT_DIR', '/output')
+    mtu = int(os.getenv('MTU', '9000'))
+    network_namespace = os.getenv('NETWORK_NAMESPACE', 'openshift-multus')
+    nad_name_prefix = os.getenv('NAD_NAME_PREFIX', 'sriov-roce-net')
+    cidrpool_namespace = os.getenv('CIDRPOOL_NAMESPACE', 'nvidia-network-operator')
+
+    node_selector_json = os.getenv('NODE_SELECTOR', '')
+    if node_selector_json:
+        node_selector = json.loads(node_selector_json)
+    else:
+        node_selector = {"feature.node.kubernetes.io/pci-15b3.present": "true"}
+
+    mapping = {}
+    mapping_file = os.getenv('NETWORK_MAPPING_FILE', '')
+    if mapping_file and os.path.isfile(mapping_file):
+        with open(mapping_file, 'r') as f:
+            mapping = json.load(f)
+    else:
+        print("ERROR: network-mapping.json is required for L3 routed SR-IOV")
+        sys.exit(1)
+
+    scheme = mapping["scheme"]
+    hosts = mapping["hosts"]
+    interfaces = mapping["interfaces"]
+    base_octet = scheme["baseOctet"]
+    gw_octet = scheme["hostGatewayOctet"]
+    host_ip_octet = scheme["hostIpOctet"]
+
+    ordered_ifaces = sorted(interfaces.items(), key=lambda x: int(x[1]["roceIndex"]))
+    all_hostnames = sorted(hosts.keys())
+
+    print("=== SR-IOV + nv-ipam Resource Generator ===")
+    print(f"  Rails: {len(ordered_ifaces)}")
+    print(f"  Hosts: {len(hosts)} ({', '.join(all_hostnames)})")
+    print(f"  NAD prefix: {nad_name_prefix}")
+    print(f"  NAD namespace: {network_namespace}")
+    print(f"  CIDRPool namespace: {cidrpool_namespace}")
+    print(f"  Policy nodeSelector: {node_selector}")
+    print(f"  Addressing: 172.<{base_octet} + railId>.<hostId>.0/24, gw .{gw_octet}")
+    print()
+
+    # --- Discover VF counts from NIC discovery data ---
+    print("=== Processing NIC Discovery Results ===")
+    all_ports = []
+    for discovery_file in glob.glob(f"{discovery_dir}/*-ports.json"):
+        node_name = os.path.basename(discovery_file).replace('-ports.json', '')
+        try:
+            with open(discovery_file, 'r') as f:
+                ports = json.load(f)
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"  WARNING: Skipping {node_name} - corrupted JSON: {e}")
+            continue
+        for port in ports:
+            port['_node_name'] = node_name
+            port['totalvfs'] = port.get('sriovTotalVfs', port.get('totalvfs', 0))
+            all_ports.append(port)
+
+    pf_max_vfs = {}
+    for port in all_ports:
+        pf = port.get('pfName', '')
+        if pf in interfaces and port.get('sriovCapable') and port.get('carrier') == '1':
+            vfs = int(port.get('totalvfs', 0))
+            pf_max_vfs[pf] = max(pf_max_vfs.get(pf, 0), vfs)
+
+    print(f"  Discovered VF caps: {pf_max_vfs}")
+    print()
+
+    # --- Generate per-rail resources ---
+    print("=== Generating Resources ===")
+
+    for pf_name, info in ordered_ifaces:
+        roce_index = int(info["roceIndex"])
+        rail_id = int(info["railId"])
+        second_octet = base_octet + rail_id
+        resource_name = f"{pf_name}_roce"
+        nad_name = f"{nad_name_prefix}-{roce_index}"
+        pool_name = f"cidr-rail{roce_index}"
+        num_vfs = pf_max_vfs.get(pf_name, 8)
+
+        # --- SriovNetworkNodePolicy ---
+        policy = {
+            "apiVersion": "sriovnetwork.openshift.io/v1",
+            "kind": "SriovNetworkNodePolicy",
+            "metadata": {
+                "name": f"policy-roce-rail{roce_index}",
+                "namespace": "openshift-sriov-network-operator"
+            },
+            "spec": {
+                "deviceType": "netdevice",
+                "mtu": mtu,
+                "nicSelector": {
+                    "vendor": "15b3",
+                    "pfNames": [pf_name]
+                },
+                "nodeSelector": node_selector,
+                "numVfs": num_vfs,
+                "priority": 90 - roce_index,
+                "isRdma": True,
+                "resourceName": resource_name
+            }
+        }
+
+        policy_file = f"{output_dir}/policy-roce-rail{roce_index}.yaml"
+        with open(policy_file, 'w') as f:
+            json.dump(policy, f, indent=2)
+        print(f"  Policy: policy-roce-rail{roce_index} -> {pf_name}, {num_vfs} VFs, resource={resource_name}")
+
+        # --- CIDRPool ---
+        static_allocs = []
+        for hostname in all_hostnames:
+            host_id = hosts[hostname]
+            prefix = f"172.{second_octet}.{host_id}.0/24"
+            static_allocs.append({"nodeName": hostname, "prefix": prefix})
+
+        cidrpool = {
+            "apiVersion": "nv-ipam.nvidia.com/v1alpha1",
+            "kind": "CIDRPool",
+            "metadata": {
+                "name": pool_name,
+                "namespace": cidrpool_namespace
+            },
+            "spec": {
+                "cidr": f"172.{second_octet}.0.0/16",
+                "perNodeNetworkPrefix": 24,
+                "gatewayIndex": gw_octet,
+                "defaultGateway": True,
+                "routes": [{"dst": f"172.{second_octet}.0.0/16"}],
+                "nodeSelector": {
+                    "nodeSelectorTerms": [{
+                        "matchExpressions": [{
+                            "key": "kubernetes.io/hostname",
+                            "operator": "In",
+                            "values": all_hostnames
+                        }]
+                    }]
+                },
+                "perNodeExclusions": [
+                    {"startIndex": host_ip_octet, "endIndex": host_ip_octet}
+                ],
+                "staticAllocations": static_allocs
+            }
+        }
+
+        pool_file = f"{output_dir}/cidrpool-rail{roce_index}.yaml"
+        with open(pool_file, 'w') as f:
+            json.dump(cidrpool, f, indent=2)
+        alloc_str = ", ".join([f"host{hosts[h]}=172.{second_octet}.{hosts[h]}.0/24" for h in all_hostnames])
+        print(f"  CIDRPool: {pool_name} -> 172.{second_octet}.0.0/16 ({alloc_str})")
+
+        # --- SriovNetwork ---
+        ipam_json = json.dumps({
+            "type": "nv-ipam",
+            "poolName": pool_name,
+            "poolType": "cidrpool"
+        })
+
+        sriov_network = {
+            "apiVersion": "sriovnetwork.openshift.io/v1",
+            "kind": "SriovNetwork",
+            "metadata": {
+                "name": nad_name,
+                "namespace": "openshift-sriov-network-operator",
+                "annotations": {
+                    "rail": str(roce_index),
+                    "pf": pf_name
+                }
+            },
+            "spec": {
+                "resourceName": resource_name,
+                "networkNamespace": network_namespace,
+                "ipam": ipam_json,
+                "metaPlugins": json.dumps({"type": "sbr-custom", "addSourceHints": True})
+            }
+        }
+
+        network_file = f"{output_dir}/sriovnetwork-rail{roce_index}.yaml"
+        with open(network_file, 'w') as f:
+            json.dump(sriov_network, f, indent=2)
+        print(f"  SriovNetwork: {nad_name} -> resource={resource_name}, ns={network_namespace}")
+        print()
+
+    print(f"=== Generated {len(ordered_ifaces)} policies + {len(ordered_ifaces)} CIDRPools + {len(ordered_ifaces)} SriovNetworks ===")
+
+  generate-nic-resources.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "=== NIC Resource Generator (SR-IOV + nv-ipam) ==="
+
+    DISCOVERY_DIR="/tmp/discovery"
+    OUTPUT_DIR="/tmp/output"
+    mkdir -p "$DISCOVERY_DIR" "$OUTPUT_DIR"
+
+    NS="${NAMESPACE:-llm-d-setup}"
+
+    MAPPING_FILE="${DISCOVERY_DIR}/network-mapping.json"
+    if oc get configmap network-mapping -n "$NS" &>/dev/null; then
+      echo "Found network-mapping ConfigMap"
+      oc get configmap network-mapping -n "$NS" -o jsonpath='{.data.mapping\.json}' > "$MAPPING_FILE"
+      export NETWORK_MAPPING_FILE="$MAPPING_FILE"
+    else
+      echo "ERROR: network-mapping ConfigMap required in namespace $NS"
+      exit 1
+    fi
+
+    echo "Reading discovery ConfigMaps..."
+
+    CM_NAMES=$(oc get configmap -n "$NS" -l app=nic-discovery -o jsonpath='{.items[*].metadata.name}')
+
+    if [ -z "$CM_NAMES" ]; then
+      echo "Error: No nic-discovery ConfigMaps found in namespace $NS"
+      echo "Did step 12 (NIC Discovery) run successfully?"
+      exit 1
+    fi
+
+    for cm in $CM_NAMES; do
+      node="${cm#nic-discovery-}"
+      echo "Reading ConfigMap: $cm (node: $node)"
+      DISCOVERY_FILE="${DISCOVERY_DIR}/${node}-ports.json"
+      oc get configmap "$cm" -n "$NS" -o jsonpath='{.data.ports\.json}' > "$DISCOVERY_FILE"
+    done
+
+    export DISCOVERY_DIR OUTPUT_DIR MTU NETWORK_NAMESPACE NAD_NAME_PREFIX CIDRPOOL_NAMESPACE
+    python3 /scripts/generate_nic_resources.py
+
+    echo ""
+    echo "=== Applying CIDRPools (must exist before SriovNetworks) ==="
+    for f in "$OUTPUT_DIR"/cidrpool-*.yaml; do
+      [ -f "$f" ] && oc apply -f "$f" && echo "Applied: $(basename "$f")"
+    done
+
+    echo ""
+    echo "=== Applying SriovNetworkNodePolicies ==="
+    for f in "$OUTPUT_DIR"/policy-*.yaml; do
+      [ -f "$f" ] && oc apply -f "$f" && echo "Applied: $(basename "$f")"
+    done
+
+    echo ""
+    echo "=== Applying SriovNetworks ==="
+    for f in "$OUTPUT_DIR"/sriovnetwork-*.yaml; do
+      [ -f "$f" ] && oc apply -f "$f" && echo "Applied: $(basename "$f")"
+    done
+
+    echo ""
+    echo "=== Cleanup Discovery Resources ==="
+    oc delete daemonset nic-port-discovery -n llm-d-setup --ignore-not-found=true

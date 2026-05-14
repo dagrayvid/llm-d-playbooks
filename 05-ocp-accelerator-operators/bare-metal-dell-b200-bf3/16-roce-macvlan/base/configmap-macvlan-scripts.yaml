@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: macvlan-configurator-scripts
+  namespace: nvidia-network-operator
+data:
+  generate-macvlan-resources.py: |
+    #!/usr/bin/env python3
+    """Generate CIDRPools and NADs for L3 routed RoCE macvlan networking.
+
+    Reads /tmp/network-mapping.json (formula-based rail/host addressing) and creates:
+      - One nv-ipam CIDRPool per rail with staticAllocations pinning each node to its /24
+      - One NetworkAttachmentDefinition per rail (shared across nodes) with chained plugins:
+        macvlan + sbr-custom (SBR reads gateway from IPAM prevResult, not hardcoded)
+
+    Addressing formula:
+      subnet:  172.<baseOctet + railId>.<hostId>.0/24
+      gateway: 172.<baseOctet + railId>.<hostId>.<hostGatewayOctet>
+    """
+    import json
+    import sys
+    import os
+    import subprocess
+
+    NETWORK_NAMESPACE = os.environ.get("NETWORK_NAMESPACE", "openshift-multus")
+    NAD_NAME_PREFIX = (os.environ.get("NAD_NAME_PREFIX", "llmd-roce-net") or "llmd-roce-net").strip()
+    MTU = int(os.environ.get("MTU", "9000"))
+
+    mapping_file = "/tmp/network-mapping.json"
+
+    if not os.path.exists(mapping_file):
+        print("ERROR: /tmp/network-mapping.json not found")
+        print("The network-mapping ConfigMap must exist in llm-d-setup namespace")
+        sys.exit(1)
+
+    with open(mapping_file, 'r') as f:
+        mapping = json.load(f)
+
+    scheme = mapping.get("scheme")
+    hosts = mapping.get("hosts")
+    interfaces = mapping.get("interfaces")
+
+    if not scheme or not hosts or not interfaces:
+        print("ERROR: mapping must contain 'scheme', 'hosts', and 'interfaces' keys")
+        sys.exit(1)
+
+    base_octet = scheme["baseOctet"]
+    gw_octet = scheme["hostGatewayOctet"]
+    host_ip_octet = scheme["hostIpOctet"]
+
+    ordered = sorted(interfaces.items(), key=lambda x: int(x[1]["roceIndex"]))
+    seen_idx = set()
+    for pf, info in ordered:
+        ri = int(info["roceIndex"])
+        if ri in seen_idx:
+            print("ERROR: duplicate roceIndex %d" % ri)
+            sys.exit(1)
+        seen_idx.add(ri)
+
+    sorted_hosts = sorted(hosts.keys())
+    all_hostnames = [h for h in sorted_hosts]
+
+    print("=== NAD + CIDRPool Generator (L3 routed macvlan + SBR) ===")
+    print("  Rails: %d" % len(ordered))
+    print("  Hosts: %d (%s)" % (len(hosts), ", ".join(sorted_hosts)))
+    print("  NAD name prefix: %s" % NAD_NAME_PREFIX)
+    print("  Target namespace: %s" % NETWORK_NAMESPACE)
+    print("  MTU: %d" % MTU)
+    print("  Addressing: 172.<%d + railId>.<hostId>.0/24, gw .%d" % (base_octet, gw_octet))
+    print("")
+
+    def oc_apply(resource_dict):
+        """Apply a resource via oc apply -f -. Returns (success, stderr)."""
+        resource_json = json.dumps(resource_dict)
+        p = subprocess.run(
+            ["oc", "apply", "-f", "-"],
+            input=resource_json,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        return p.returncode == 0, p.stderr.strip()
+
+    errors = 0
+
+    for pf_name, info in ordered:
+        rail_id = int(info["roceIndex"])
+        rail_net = int(info["railId"])
+        second_octet = base_octet + rail_net
+        nad_name = "%s-%d" % (NAD_NAME_PREFIX, rail_id)
+        pool_name = "cidr-rail%d" % rail_id
+
+        static_allocs = []
+        for hostname in sorted_hosts:
+            host_id = hosts[hostname]
+            prefix = "172.%d.%d.0/24" % (second_octet, host_id)
+            static_allocs.append({
+                "nodeName": hostname,
+                "prefix": prefix
+            })
+
+        cidrpool = {
+            "apiVersion": "nv-ipam.nvidia.com/v1alpha1",
+            "kind": "CIDRPool",
+            "metadata": {
+                "name": pool_name,
+                "namespace": "nvidia-network-operator"
+            },
+            "spec": {
+                "cidr": "172.%d.0.0/16" % second_octet,
+                "perNodeNetworkPrefix": 24,
+                "gatewayIndex": gw_octet,
+                "defaultGateway": True,
+                "nodeSelector": {
+                    "nodeSelectorTerms": [{
+                        "matchExpressions": [{
+                            "key": "kubernetes.io/hostname",
+                            "operator": "In",
+                            "values": all_hostnames
+                        }]
+                    }]
+                },
+                "perNodeExclusions": [
+                    {"startIndex": host_ip_octet, "endIndex": host_ip_octet}
+                ],
+                "staticAllocations": static_allocs
+            }
+        }
+
+        ok, err = oc_apply(cidrpool)
+        if ok:
+            alloc_info = ", ".join(["host%d=172.%d.%d.0/24" % (hosts[h], second_octet, hosts[h]) for h in sorted_hosts])
+            print("  CIDRPool %s: 172.%d.0.0/16 -> %s" % (pool_name, second_octet, alloc_info))
+        else:
+            print("  ERROR creating CIDRPool %s: %s" % (pool_name, err))
+            errors += 1
+
+        plugins = [
+            {
+                "type": "macvlan",
+                "master": pf_name,
+                "mode": "bridge",
+                "mtu": MTU,
+                "ipam": {
+                    "type": "nv-ipam",
+                    "poolName": pool_name,
+                    "poolType": "cidrpool"
+                }
+            }
+        ]
+
+        cni_config = {
+            "cniVersion": "0.3.1",
+            "name": nad_name,
+            "plugins": plugins
+        }
+
+        nad = {
+            "apiVersion": "k8s.cni.cncf.io/v1",
+            "kind": "NetworkAttachmentDefinition",
+            "metadata": {
+                "name": nad_name,
+                "namespace": NETWORK_NAMESPACE
+            },
+            "spec": {
+                "config": json.dumps(cni_config)
+            }
+        }
+
+        ok, err = oc_apply(nad)
+        if ok:
+            print("  NAD %s -> macvlan master %s + sbr-custom (gw from IPAM)" % (nad_name, pf_name))
+        else:
+            print("  ERROR creating NAD %s: %s" % (nad_name, err))
+            errors += 1
+
+        print("")
+
+    print("---")
+    if errors > 0:
+        print("Completed with %d error(s)" % errors)
+        sys.exit(1)
+    else:
+        print("Created %d CIDRPools and %d NADs" % (len(ordered), len(ordered)))

@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/llm-d/llm-d-playbooks.git
     targetRevision: main
-    path: 05-ocp-accelerator-operators/11-ib-interface-normalization/base
+    path: 05-ocp-accelerator-operators/bare-metal-dell-b200-bf3/11-ib-interface-normalization
   project: default
   syncPolicy:
     automated:
