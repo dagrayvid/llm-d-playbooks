@@ -21,7 +21,7 @@ spec:
       - "0000:cc:00.0"  # ens34f0np0 rail 9
       - "0000:db:00.0"  # ens35f0np0 rail 7
   template:
-    numVfs: 16
+    numVfs: 8
     linkType: Ethernet
     pciPerformanceOptimized:
       enabled: true

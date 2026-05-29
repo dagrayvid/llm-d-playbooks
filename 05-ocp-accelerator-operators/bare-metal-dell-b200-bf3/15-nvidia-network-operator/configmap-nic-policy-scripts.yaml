@@ -31,6 +31,15 @@ data:
         env:
           - name: UNLOAD_STORAGE_MODULES
             value: 'true'
+          # Disable VF driver restoration on pod termination. The default (true)
+          # attempts to reinitialize VFs when pods die, but on BF3 SuperNICs this
+          # restoration process during ungraceful termination (e.g. UCX timeout crash)
+          # may itself corrupt VF RDMA state, causing persistent degradation that
+          # only clears on reboot. Setting false leaves VFs as-is on pod termination.
+          - name: RESTORE_DRIVER_ON_POD_TERMINATION
+            value: 'false'
+          - name: CREATE_IFNAMES_UDEV
+            value: 'true'
         livenessProbe:
           initialDelaySeconds: 30
           periodSeconds: 30

@@ -1,0 +1,131 @@
+# GPU + SR-IOV RoCE test pods for GPUDirect RDMA validation.
+# Each pod gets 1 GPU + 10 SR-IOV VFs (one per rail).
+# Use: ib_write_bw -d <mlx5_X> -x 3 --use_cuda=0 --report_gbits -F -s 8388608 -n 5000 -p 18515
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-sriov-gpu-test-0
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "sriov-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-9", "namespace": "openshift-multus"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: quay.io/dagray/rdma-tools:tiny
+    imagePullPolicy: Always
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+      limits:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_ADMIN"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-sriov-gpu-test-1
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "sriov-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-9", "namespace": "openshift-multus"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: quay.io/dagray/rdma-tools:tiny
+    imagePullPolicy: Always
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+      limits:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_ADMIN"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi

@@ -323,7 +323,7 @@ Key findings:
 
 ## Problems Encountered and Solutions
 
-Detailed troubleshooting notes covering ACS, IOMMU, memlock, MTU validation, and more are in [`cluster-notes.md`](cluster-notes.md).
+Detailed troubleshooting notes covering ACS, IOMMU, memlock, MTU validation, and more are in [`../../test-logs/rdma-perf-journal.md`](../../test-logs/rdma-perf-journal.md).
 
 Key issues that were solved during bring-up:
 
@@ -336,3 +336,9 @@ Key issues that were solved during bring-up:
 7. **memlock not raised by `IPC_LOCK` alone** — CRI-O sets the hard limit; `ContainerRuntimeConfig` required
 8. **In-pod GPU-NIC topology mapping** — created diagnostic scripts to map GPU -> HCA -> PF -> macvlan -> IP
 9. **GID index inconsistency** — varies per node/device; NCCL auto-detects; do NOT set `NCCL_IB_GID_INDEX` globally
+10. **SR-IOV operator scheduling deadlock during VF reconfiguration** — when the SR-IOV config daemon drains/cordons the master node for a firmware change (e.g., reducing VFs from 16 to 8), the operator pod itself becomes unschedulable if it has a `nodeSelector` pinning it to master nodes. This creates a deadlock: the operator must be running to orchestrate the reconfiguration, but it can't run because the only master is cordoned. Fix: remove the `nodeSelector` so the operator can schedule on any node:
+    ```bash
+    oc patch deployment sriov-network-operator -n openshift-sriov-network-operator \
+      --type=json -p='[{"op":"remove","path":"/spec/template/spec/nodeSelector"}]'
+    ```
+    This allows the operator to float to whichever node is schedulable during rolling NIC firmware updates. The `MaxParallelNodeConfiguration` setting (default 1) in `SriovOperatorConfig` controls how many nodes are processed concurrently — with only one node draining at a time, the operator can always run on the other.

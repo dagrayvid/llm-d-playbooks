@@ -69,6 +69,8 @@ spec:
               value: "sriov-roce-net"
             - name: CIDRPOOL_NAMESPACE
               value: "nvidia-network-operator"
+            - name: NUM_VFS
+              value: "8"
             - name: NODE_SELECTOR
               value: '{"feature.node.kubernetes.io/pci-15b3.present": "true"}'
           volumeMounts:

@@ -1,0 +1,130 @@
+# Test pods for SR-IOV RoCE validation (intra-node via fabric gateway).
+# Each pod gets:
+#   - 1 SR-IOV VF from each of the 10 RoCE PFs
+#   - 10 net interfaces (one per rail, with IP from nv-ipam CIDRPool)
+#   - RDMA capability via isRdma=true on the VFs
+# Both pods are on the same node; traffic goes out to the ToR and back.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-sriov-test-0
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "sriov-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-9", "namespace": "openshift-multus"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: quay.io/dagray/rdma-tools:tiny
+    imagePullPolicy: Always
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+      limits:
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_ADMIN"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rdma-sriov-test-1
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "sriov-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-7", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-8", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-9", "namespace": "openshift-multus"}
+      ]
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: test
+    image: quay.io/dagray/rdma-tools:tiny
+    imagePullPolicy: Always
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+      limits:
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+        openshift.io/ens42f0np0_roce: '1'
+        openshift.io/ens34f0np0_roce: '1'
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_ADMIN"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi

@@ -1,0 +1,127 @@
+# UCX perftest pods for SR-IOV RoCE validation.
+# Server on dell-b200-1, Client on dell-b200-2.
+# Each gets 8 SR-IOV VFs (one per GPU-aligned rail).
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ucx-perftest-server
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "sriov-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-7", "namespace": "openshift-multus"}
+      ]
+  labels:
+    app: ucx-perftest
+    role: server
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-1.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: main
+    image: registry.stage.redhat.io/rhaii/vllm-cuda-rhel9@sha256:d3e57d4ca13a17f4d5d1228df4fe47cfe1a9f630250a8b3d26f86d871fdb9e69
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+      limits:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_ADMIN"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  imagePullSecrets:
+  - name: rhai-pull-secret
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ucx-perftest-client
+  namespace: llm-d-setup
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [
+        {"name": "sriov-roce-net-0", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-1", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-2", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-3", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-4", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-5", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-6", "namespace": "openshift-multus"},
+        {"name": "sriov-roce-net-7", "namespace": "openshift-multus"}
+      ]
+  labels:
+    app: ucx-perftest
+    role: client
+spec:
+  restartPolicy: Never
+  nodeName: dell-b200-2.bmas-001.lab.rdu2.dc.redhat.com
+  containers:
+  - name: main
+    image: registry.stage.redhat.io/rhaii/vllm-cuda-rhel9@sha256:d3e57d4ca13a17f4d5d1228df4fe47cfe1a9f630250a8b3d26f86d871fdb9e69
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+      limits:
+        nvidia.com/gpu: '1'
+        openshift.io/ens40f0np0_roce: '1'
+        openshift.io/ens41f0np0_roce: '1'
+        openshift.io/ens38f0np0_roce: '1'
+        openshift.io/ens37f0np0_roce: '1'
+        openshift.io/ens32f0np0_roce: '1'
+        openshift.io/ens31f0np0_roce: '1'
+        openshift.io/ens36f0np0_roce: '1'
+        openshift.io/ens35f0np0_roce: '1'
+    securityContext:
+      capabilities:
+        add: ["IPC_LOCK", "NET_ADMIN"]
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  imagePullSecrets:
+  - name: rhai-pull-secret
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 16Gi

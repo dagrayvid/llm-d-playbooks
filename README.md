@@ -28,17 +28,16 @@ This repository contains playbooks for deploying and validating [llm-d](https://
 
 ## Chapter 5: OCP Accelerator Operators
 
-Chapter 5 supports three hardware platforms via kustomize overlays:
+Chapter 5 is organized as **case studies** — tested, working configurations for specific environments. RoCE on OpenShift varies too much between environments for a one-size-fits-all approach.
 
-| Platform | Description |
-|----------|-------------|
-| `bare-metal-ib` | Bare-metal with InfiniBand RDMA |
-| `bare-metal-roce` | Bare-metal with RoCE RDMA |
-| `ibm-cloud` | IBM Cloud VMs (host-device + NADs) |
+| Case Study | Environment |
+|------------|-------------|
+| [`ibm-cloud-vpc/`](05-ocp-accelerator-operators/ibm-cloud-vpc/) | IBM Cloud VPC bare-metal workers (ConnectX-6 Dx VFs, host-device CNI) |
+| [`bare-metal-dell-b200-bf3/`](05-ocp-accelerator-operators/bare-metal-dell-b200-bf3/) | Dell MX750c, 2 nodes, 8x B200, BlueField-3 (macvlan + RoCE) |
 
 Three installation modes are available:
-- **Manual**: Step-by-step `oc apply -k` with explanations in each step's README
-- **Script**: `./05-ocp-accelerator-operators/install.sh --platform <platform>`
+- **Manual**: Step-by-step `oc apply -k` with explanations in each case study's README
+- **Script**: `./05-ocp-accelerator-operators/install.sh --case-study <case-study>`
 - **ArgoCD**: GitOps app-of-apps under `05-ocp-accelerator-operators/argocd/`
 
 ## Shared Resources

@@ -96,7 +96,7 @@ data:
         resource_name = f"{pf_name}_roce"
         nad_name = f"{nad_name_prefix}-{roce_index}"
         pool_name = f"cidr-rail{roce_index}"
-        num_vfs = pf_max_vfs.get(pf_name, 8)
+        num_vfs = int(os.getenv('NUM_VFS', '8'))
 
         # --- SriovNetworkNodePolicy ---
         policy = {
@@ -145,7 +145,7 @@ data:
                 "perNodeNetworkPrefix": 24,
                 "gatewayIndex": gw_octet,
                 "defaultGateway": True,
-                "routes": [{"dst": f"172.{second_octet}.0.0/16"}],
+                "routes": [{"dst": f"172.{second_octet}.0.0/16"}, {"dst": "172.16.0.0/12"}],
                 "nodeSelector": {
                     "nodeSelectorTerms": [{
                         "matchExpressions": [{
@@ -189,6 +189,7 @@ data:
             "spec": {
                 "resourceName": resource_name,
                 "networkNamespace": network_namespace,
+                "vlan": 0,
                 "ipam": ipam_json,
                 "metaPlugins": json.dumps({"type": "sbr-custom", "addSourceHints": True})
             }
