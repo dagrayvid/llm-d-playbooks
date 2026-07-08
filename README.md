@@ -14,16 +14,19 @@ This repository contains playbooks for deploying and validating [llm-d](https://
 
 ## Deployment Steps
 
-| Directory | Purpose |
-|-----------|---------|
-| [01-cluster-bring-up/](01-cluster-bring-up/) | Install and bootstrap a Kubernetes cluster on one of the tested platforms. |
-| [02-operators/](02-operators/) | Install the operators required for llm-d (cert-manager, service mesh, KServe, LeaderWorkerSet, etc.). |
-| [03-control-plane-readiness/](03-control-plane-readiness/) | Validate that all required CRDs are present, operators are healthy, and the cluster is ready for llm-d. |
-| [04-rdma-networking/](04-rdma-networking/) | Configure RDMA networking (RoCE / InfiniBand) for prefill-decode disaggregation and multi-node inference. |
-| [05-rdma-network-validation/](05-rdma-network-validation/) | Validate RDMA network connectivity, bandwidth, and latency. |
-| [06-llm-d-deploy/](06-llm-d-deploy/) | Deploy llm-d and benchmark tools (GuideLLM). |
-| [07-llm-deployment-validation/](07-llm-deployment-validation/) | Validate the deployment through functional and performance tests. |
+| Chapter | Directory | Purpose | OCP | xKS |
+|---------|-----------|---------|-----|-----|
+| 1 | [01-cluster-install/](01-cluster-install/) | Install and bootstrap a Kubernetes cluster | Y | Y |
+| 2 | [02-validate-cluster-install/](02-validate-cluster-install/) | Verify cluster meets minimum requirements | Y | Y |
+| 3 | [03-llm-d-dependencies/](03-llm-d-dependencies/) | Install llm-d operators (cert-manager, service mesh, KServe, etc.) | Y | Y |
+| 4 | [04-validate-llm-d-dependencies/](04-validate-llm-d-dependencies/) | Validate CRDs and pod network bandwidth | Y | Y |
+| 5 | [05-ocp-accelerator-operators/](05-ocp-accelerator-operators/) | Install GPU, RDMA, and networking operators (NFD, GPU, Network, SR-IOV) | Y | N |
+| 6 | [06-validate-gpu-readiness/](06-validate-gpu-readiness/) | Verify GPU resources are available on nodes | Y | Y |
+| 7 | [07-rdma-validation/](07-rdma-validation/) | Validate RDMA connectivity, bandwidth, and latency | Y | Y |
+| 8 | [08-deploy-and-benchmark/](08-deploy-and-benchmark/) | Deploy llm-d and benchmark performance | Y | Y |
 
-## Shared Resources
+## Chapter 5: OCP Accelerator Operators
 
-Common scripts and assets are located in the [shared/](shared/) directory.
+Chapter 5 is organized as **case studies** — tested, working configurations for specific environments. GPU and RDMA operator configuration varies too much between environments for a one-size-fits-all approach. The `common/` directory contains shared operator subscriptions (NFD, GPU Operator, NVIDIA Network Operator) used across all case studies.
+
+Case studies will be added as they are validated. See the [Chapter 5 README](05-ocp-accelerator-operators/README.md) for details on the case-study pattern.
