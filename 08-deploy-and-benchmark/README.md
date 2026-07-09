@@ -14,7 +14,7 @@ This chapter covers deploying llm-d and measuring its performance. Each deployme
 | Mode | Guide | Description | RDMA Required |
 |------|-------|-------------|---------------|
 | Intelligent inference | [intelligent-inference-scheduler/](intelligent-inference-scheduler/) | Prefix-cache-aware routing with EPP | No |
-| P/D disaggregation | *Coming soon* | Separate prefill and decode onto different pods | Yes |
+| P/D disaggregation | [pd-disaggregation/](pd-disaggregation/) | Separate prefill and decode onto different pods | Yes |
 
 Future modes (WideEP, batch, flow control) will be added as they become available.
 
