@@ -8,6 +8,8 @@ spec:
     uri: hf://Qwen/Qwen3-0.6B
   replicas: 1
   template:
+    imagePullSecrets:
+      - name: rhai-pull-secret
     containers:
       - name: main
         env:
@@ -48,6 +50,8 @@ spec:
   prefill:
     replicas: 1
     template:
+      imagePullSecrets:
+        - name: rhai-pull-secret
       containers:
         - name: main
           env:

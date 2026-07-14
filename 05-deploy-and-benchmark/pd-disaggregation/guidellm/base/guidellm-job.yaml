@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guidellm-benchmark
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: guidellm
+        image: ghcr.io/vllm-project/guidellm:v0.6.0
+        command:
+          - guidellm
+          - benchmark
+          - run
+          - --target
+          # Overridden by kustomize overlay — see overlays/baseline/ or overlays/pd-performance/
+          - CHANGE_ME
+          - --model
+          - nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+          - --profile
+          - concurrent
+          - --rate
+          - "64"
+          - --data
+          - "prompt_tokens=8000,prompt_tokens_stdev=1000,output_tokens=500,output_tokens_stdev=200"
+          - --max-requests
+          - "1024"
+        env:
+          - name: USER
+            value: guidellm
+          - name: HF_HOME
+            value: /tmp/hf-cache
+          - name: TRANSFORMERS_CACHE
+            value: /tmp/hf-cache
+          - name: XDG_CACHE_HOME
+            value: /tmp
+        volumeMounts:
+          - name: cache
+            mountPath: /tmp/hf-cache
+          - name: results
+            mountPath: /results
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: results
+          emptyDir: {}
