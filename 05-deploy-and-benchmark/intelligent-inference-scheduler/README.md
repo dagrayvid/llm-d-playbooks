@@ -27,7 +27,7 @@ Deploy Prometheus and Grafana for real-time metrics visualization during benchma
 
 ```bash
 # From the benchmarks directory
-cd 08-deploy-and-benchmark/intelligent-inference-scheduler
+cd 05-deploy-and-benchmark/intelligent-inference-scheduler
 
 # Deploy monitoring
 oc apply -k monitoring

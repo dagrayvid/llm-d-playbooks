@@ -18,4 +18,4 @@ Cluster installation is handled by each platform's own tooling and documentation
 
 ## Next Steps
 
-Once your cluster is running, proceed to [Chapter 02: Validate Cluster Installation](../02-validate-cluster-install/).
+Once your cluster is running, proceed to [Chapter 02: llm-d Dependencies](../02-llm-d-dependencies/).

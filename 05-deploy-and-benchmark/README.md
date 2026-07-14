@@ -1,13 +1,13 @@
-# Chapter 08: Deploy and Benchmark
+# Chapter 05: Deploy and Benchmark
 
 This chapter covers deploying llm-d and measuring its performance. Each deployment mode has its own self-contained sub-guide with deployment manifests, benchmark tooling, and an optional baseline comparison.
 
 ## Prerequisites
 
 - Cluster with GPU nodes available
-- llm-d dependencies installed ([Chapter 03](../03-llm-d-dependencies/))
-- GPU operator running and validated ([Chapter 06](../06-validate-gpu-readiness/))
-- For P/D disaggregation: RDMA networking configured and validated ([Chapter 05](../05-ocp-accelerator-operators/), [Chapter 07](../07-rdma-validation/))
+- llm-d dependencies installed ([Chapter 02](../02-llm-d-dependencies/))
+- GPU operator running and validated ([Chapter 04](../04-validate-cluster/))
+- For P/D disaggregation: RDMA networking configured and validated ([Chapter 03](../03-ocp-accelerator-operators/), [Chapter 04](../04-validate-cluster/))
 
 ## Deployment Modes
 

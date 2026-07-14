@@ -1,4 +1,4 @@
-# Chapter 03: llm-d Dependencies
+# Chapter 02: llm-d Dependencies
 
 ## Purpose
 
@@ -31,5 +31,5 @@ The table below shows which components are installed per platform. The component
 
 ## Next Steps
 
-Once these llm-d dependencies are installed proceed to [Chapter 04: Validate llm-d Dependencies](../04-validate-llm-d-dependencies/) to confirm they are healthy.
+Once these llm-d dependencies are installed proceed to [Chapter 03: OCP Accelerator Operators](../03-ocp-accelerator-operators/) (OCP only) or [Chapter 04: Validate Cluster](../04-validate-cluster/) to confirm they are healthy.
 

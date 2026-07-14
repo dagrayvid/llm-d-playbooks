@@ -1,4 +1,4 @@
-# Chapter 05: OCP Accelerator Operators
+# Chapter 03: OCP Accelerator Operators
 
 Install and configure GPU, RDMA, and networking operators on OpenShift Container Platform.
 

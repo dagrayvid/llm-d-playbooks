@@ -20,12 +20,12 @@ P/D disaggregation separates these phases onto different pod groups, each tuned 
 | **Optimized for** | Memory bandwidth       | Compute throughput                    |
 
 
-After a prefill pod processes a prompt, it transfers the KV cache to a decode pod via **NIXL** (NVIDIA Inference eXchange Layer) over **RDMA**, avoiding a CPU-mediated copy. This requires RDMA networking — see [Chapter 07](../../07-rdma-validation/).
+After a prefill pod processes a prompt, it transfers the KV cache to a decode pod via **NIXL** (NVIDIA Inference eXchange Layer) over **RDMA**, avoiding a CPU-mediated copy. This requires RDMA networking — see [Chapter 04](../../04-validate-cluster/).
 
 ## Prerequisites
 
-- Cluster with RDMA networking configured and validated — see [Chapter 05](../../05-ocp-accelerator-operators/) and [Chapter 07](../../07-rdma-validation/)
-- GPU operator running — see [Chapter 06](../../06-validate-gpu-readiness/)
+- Cluster with RDMA networking configured and validated — see [Chapter 03](../../03-ocp-accelerator-operators/) and [Chapter 04](../../04-validate-cluster/)
+- GPU operator running — see [Chapter 04](../../04-validate-cluster/)
 - Image pull secret `rhai-pull-secret` for Red Hat AI container images
 - `oc` or `kubectl` CLI authenticated to the cluster
 - **(OCP)** P/D pods require `IPC_LOCK` for RDMA memory registration, which is not permitted by the default restricted SCC. The operator creates a service account `<name>-kserve` for decode pods; prefill pods use the `default` SA. Grant both the `openshift-ai-llminferenceservice-scc`:
@@ -70,7 +70,7 @@ NOTE: The `base/` uses `rdma/ib` (common on CKS) in the resource requests/limits
 On OpenShift (RHOAI), create the GatewayClass and Gateway before deploying any LLMInferenceService. Skip this on CKS/AKS.
 
 ```bash
-cd 08-deploy-and-benchmark/pd-disaggregation
+cd 05-deploy-and-benchmark/pd-disaggregation
 
 oc apply -f llm-d/ocp-gateway.yaml
 ```
