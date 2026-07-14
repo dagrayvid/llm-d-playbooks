@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: guidellm-scripts
+data:
+  guidellm-run.sh: |
+    export GATEWAY_IP=10.16.4.0
+
+    #  --backend-kwargs "{\"api_key\": \"$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\"}" \
+    guidellm benchmark \
+      --target http://${GATEWAY_IP}/default/pd-minimal \
+      --model "Qwen/Qwen3-0.6B" \
+      --profile concurrent \
+      --rate 8 \
+      --data "prompt_tokens=800,prompt_tokens_stdev=100,output_tokens=80,output_tokens_stdev=40" \
+      --max-requests 64
+  curl.sh: |
+    export GATEWAY_IP=10.16.4.0
+    curl -s http://${GATEWAY_IP}/default/pd-minimal/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "Qwen/Qwen3-0.6B",
+        "messages": [{"role": "user", "content": "What is Kubernetes? And how can you use GPUs on kubernetes with VMs? I have 10 billion dollars of NVL72 servers and Ive never built a computer or installed software before? I mainly use tablets like ipad and android. Do you think I can get this working?"}],
+        "max_tokens": 200
+      }'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: guidellm
+spec:
+  #  serviceAccountName: guidellm
+  containers:
+  - name: guidellm
+    image: ghcr.io/vllm-project/guidellm:v0.6.0
+    imagePullPolicy: Always
+    env:
+    - name: USER
+      value: "guidellm"
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    volumeMounts:
+    - name: results
+      mountPath: /results
+    - name: scripts
+      mountPath: /scripts
+    command:
+    - /bin/bash
+    tty: true
+    stdin: true
+  volumes:
+  - name: results
+    emptyDir: {}
+  - name: scripts
+    configMap:
+      name: guidellm-scripts
+      defaultMode: 0755

@@ -1,0 +1,112 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: pd-performance
+spec:
+  model:
+    name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+    uri: hf://nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+  replicas: 2
+  template:
+    imagePullSecrets:
+      - name: rhai-pull-secret
+    containers:
+      - name: main
+        env:
+          - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: VLLM_ADDITIONAL_ARGS
+            value: --tensor-parallel-size 2 --trust-remote-code --max-model-len 32768 --block-size 128 --no-disable-hybrid-kv-cache-manager --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+        ports:
+          - containerPort: 5600
+            name: nixl
+            protocol: TCP
+        resources:
+          limits:
+            cpu: '16'
+            memory: 64Gi
+            nvidia.com/gpu: '2'
+            # Change this to match your RDMA device plugin resource name
+            rdma/ib: '1'
+          requests:
+            cpu: '8'
+            memory: 16Gi
+            nvidia.com/gpu: '2'
+            rdma/ib: '1'
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+        volumeMounts:
+          - name: shm
+            mountPath: /dev/shm
+          - name: kserve-provision-location
+            mountPath: /mnt/models
+    volumes:
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      - name: kserve-provision-location
+        persistentVolumeClaim:
+          claimName: model-cache-nemotron-30b
+  prefill:
+    replicas: 2
+    template:
+      imagePullSecrets:
+        - name: rhai-pull-secret
+      containers:
+        - name: main
+          env:
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: VLLM_ADDITIONAL_ARGS
+              value: --tensor-parallel-size 2 --trust-remote-code --max-model-len 32768 --gpu-memory-utilization 0.88 --block-size 128 --no-disable-hybrid-kv-cache-manager --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          ports:
+            - containerPort: 5600
+              name: nixl
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '8'
+              memory: 64Gi
+              nvidia.com/gpu: '2'
+              rdma/ib: '1'
+            requests:
+              cpu: '4'
+              memory: 16Gi
+              nvidia.com/gpu: '2'
+              rdma/ib: '1'
+          securityContext:
+            capabilities:
+              add:
+                - IPC_LOCK
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+            - name: kserve-provision-location
+              mountPath: /mnt/models
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+        - name: kserve-provision-location
+          persistentVolumeClaim:
+            claimName: model-cache-nemotron-30b
+  router:
+    gateway: {}
+    route: {}
+    scheduler:
+      template:
+        containers:
+          - name: main
+            args:
+              - -v=10
+            resources: {}
+          - name: tokenizer
+            resources: {}

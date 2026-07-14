@@ -1,0 +1,51 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: nemotron-30b
+spec:
+  model:
+    name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+    uri: hf://nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+  replicas: 4
+  router:
+    gateway: {}
+    route: {}
+    scheduler:
+      template:
+        containers:
+          - name: main
+          - name: tokenizer
+        imagePullSecrets:
+          - name: rhai-pull-secret
+  template:
+    imagePullSecrets:
+      - name: rhai-pull-secret
+    containers:
+      - name: main
+        env:
+          - name: PYTORCH_ALLOC_CONF
+            value: expandable_segments:True
+          - name: VLLM_ADDITIONAL_ARGS
+            value: --tensor-parallel-size 2 --trust-remote-code --gpu-memory-utilization 0.95 --max-num-batched-tokens 1024 --max-model-len 32768
+        resources:
+          limits:
+            cpu: '8'
+            memory: 64Gi
+            nvidia.com/gpu: '2'
+          requests:
+            cpu: '4'
+            memory: 16Gi
+            nvidia.com/gpu: '2'
+        volumeMounts:
+          - name: shm
+            mountPath: /dev/shm
+          - name: kserve-provision-location
+            mountPath: /mnt/models
+    volumes:
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      - name: kserve-provision-location
+        persistentVolumeClaim:
+          claimName: model-cache-nemotron-30b

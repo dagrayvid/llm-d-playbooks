@@ -1,0 +1,43 @@
+# OCP only — apply once before deploying any LLMInferenceService.
+# Skip this on CKS/AKS.
+#
+# On bare metal clusters without a LoadBalancer provider (e.g. MetalLB),
+# the ConfigMap sets the gateway service to ClusterIP. If your cluster
+# has LoadBalancer support, you can remove the infrastructure block and
+# the ConfigMap to get an external IP instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openshift-ai-inference-config
+  namespace: openshift-ingress
+data:
+  service: |
+    spec:
+      type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: openshift-default
+spec:
+  controllerName: openshift.io/gateway-controller/v1
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: openshift-ai-inference
+  namespace: openshift-ingress
+spec:
+  gatewayClassName: openshift-default
+  infrastructure:
+    parametersRef:
+      group: ""
+      kind: ConfigMap
+      name: openshift-ai-inference-config
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
