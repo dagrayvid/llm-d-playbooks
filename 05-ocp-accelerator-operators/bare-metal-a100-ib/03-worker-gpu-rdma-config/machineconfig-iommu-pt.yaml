@@ -1,0 +1,18 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-a100-gpu-rdma
+  labels:
+    # Targets the custom a100-gpu MachineConfigPool, not the default worker pool.
+    # Change this if your GPU nodes use a different role label.
+    machineconfiguration.openshift.io/role: a100-gpu
+spec:
+  kernelArguments:
+    # iommu=pt: IOMMU passthrough mode — required for GPUDirect RDMA.
+    # Without this, GPU-initiated DMA to NIC memory is blocked by the IOMMU.
+    - iommu=pt
+    # pci=noacs: Prevents the kernel from enabling PCIe Access Control Services.
+    # ACS blocks peer-to-peer transactions between devices on the same PCIe switch,
+    # which breaks GPUDirect RDMA. Note: this only prevents the *kernel* from
+    # enabling ACS — firmware-set ACS requires the separate disable-pcie-acs service.
+    - pci=noacs

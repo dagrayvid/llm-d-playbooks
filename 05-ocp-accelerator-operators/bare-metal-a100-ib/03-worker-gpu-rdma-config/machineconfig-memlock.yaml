@@ -1,0 +1,21 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-a100-gpu-crio-memlock
+  labels:
+    # Targets the custom a100-gpu MachineConfigPool.
+    machineconfiguration.openshift.io/role: a100-gpu
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+        - path: /etc/crio/crio.conf.d/99-memlock.conf
+          mode: 0644
+          overwrite: true
+          contents:
+            # Sets CRI-O default memlock ulimit to unlimited (-1:-1).
+            # Required for RDMA memory registration — ibv_reg_mr() pins memory
+            # and fails with ENOMEM if memlock is capped.
+            source: data:text/plain;charset=utf-8;base64,W2NyaW8ucnVudGltZV0KZGVmYXVsdF91bGltaXRzID0gWwogICAgIm1lbWxvY2s9LTE6LTEiCl0K

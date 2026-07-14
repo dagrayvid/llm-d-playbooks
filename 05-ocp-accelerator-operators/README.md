@@ -10,7 +10,9 @@ RoCE on OpenShift varies dramatically between environments — different NIC mod
 
 Each case study is a self-contained directory with its own README, step-by-step instructions, and environment-specific manifests. Use the case study closest to your environment as a starting point, and adapt as needed.
 
-Case studies will be added to this directory as they are validated. Each will be a subdirectory (e.g. `ibm-cloud-vpc/`, `bare-metal-dell-b200-bf3/`) with its own README and kustomize manifests.
+| Case Study | Environment | NIC | RDMA Transport | CNI Strategy |
+|------------|-------------|-----|----------------|--------------|
+| [`bare-metal-a100-ib/`](bare-metal-a100-ib/) | Bare-metal, 4 nodes, 8x A100 per node | ConnectX-6 PFs (InfiniBand HDR) | InfiniBand | RDMA shared device plugin |
 
 ## Shared Components (`common/`)
 

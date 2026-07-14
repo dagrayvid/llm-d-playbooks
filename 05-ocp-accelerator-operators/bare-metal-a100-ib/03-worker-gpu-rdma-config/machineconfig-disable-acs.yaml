@@ -1,0 +1,40 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-a100-gpu-disable-acs-p2p-redirect
+  labels:
+    machineconfiguration.openshift.io/role: a100-gpu
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+        - path: /usr/local/bin/disable-acs-p2p-redirect.sh
+          # Clears PCIe ACS P2P Redirect (bits 2+3) on PCI bridges (class 0x0604).
+          # Only targets ReqRedir and CmpltRedir — the two bits that redirect P2P
+          # transactions upstream through the root complex instead of allowing direct
+          # device-to-device transfers within the PCIe switch. Preserves SrcValid,
+          # UpstreamFwd, and other ACS bits. Required for GPUDirect RDMA with
+          # Broadcom PEX880xx switches.
+          contents:
+            source: data:text/plain;charset=utf-8;base64,IyEvYmluL2Jhc2gKIyBEaXNhYmxlIFBDSWUgQUNTIFAyUCBSZWRpcmVjdCBvbiBhbGwgUENJIGJyaWRnZXMKIyBSZXF1aXJlZCBmb3IgR1BVRGlyZWN0IFJETUEgd2l0aCBCcm9hZGNvbSBQRVg4ODB4eCBzd2l0Y2hlcwoKZm9yIGQgaW4gL3N5cy9idXMvcGNpL2RldmljZXMvKi87IGRvCiAgZGV2PSQoYmFzZW5hbWUgIiRkIikKICBjbGFzcz0kKGNhdCAiJGQvY2xhc3MiIDI+L2Rldi9udWxsKQogIGlmIFtbICIkY2xhc3MiID09IDB4MDYwNCogXV07IHRoZW4KICAgIGFjc19jdHJsPSQoc2V0cGNpIC1zICIkZGV2IiBFQ0FQX0FDUys2LncgMj4vZGV2L251bGwpIHx8IGNvbnRpbnVlCiAgICBpZiBbIC1uICIkYWNzX2N0cmwiIF07IHRoZW4KICAgICAgdmFsPSQoKDE2IyRhY3NfY3RybCkpCiAgICAgIGlmICgoIHZhbCAmIDB4MGMgKSk7IHRoZW4KICAgICAgICBuZXdfdmFsPSQoKCB2YWwgJiB+MHgwYyApKQogICAgICAgIG5ld19oZXg9JChwcmludGYgIiUwNHgiICRuZXdfdmFsKQogICAgICAgIHNldHBjaSAtcyAiJGRldiIgRUNBUF9BQ1MrNi53PSIkbmV3X2hleCIKICAgICAgZmkKICAgIGZpCiAgZmkKZG9uZQo=
+          filesystem: root
+          mode: 0755
+    systemd:
+      units:
+        - name: disable-acs-p2p-redirect.service
+          enabled: true
+          contents: |
+            [Unit]
+            Description=Disable PCIe ACS P2P Redirect for GPUDirect RDMA
+            After=network-online.target
+            Before=nvidia-driver.service
+
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/bin/disable-acs-p2p-redirect.sh
+            RemainAfterExit=yes
+
+            [Install]
+            WantedBy=multi-user.target

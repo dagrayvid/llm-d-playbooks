@@ -1,0 +1,69 @@
+apiVersion: mellanox.com/v1alpha1
+kind: NicClusterPolicy
+metadata:
+  name: nic-cluster-policy
+spec:
+  ofedDriver:
+    image: doca-driver
+    # Change this to your MOFED image registry. The default nvcr.io/nvidia/mellanox
+    # works if your cluster has internet access; use a private mirror otherwise.
+    repository: example-registry-quay-redhat-quay.apps.openshift.nm.rdu4.corp.redhat.com/admin
+    # MOFED driver version — must match the NVIDIA Network Operator version.
+    # To find the correct version for your operator installation:
+    #   oc get csv -n nvidia-network-operator -o jsonpath='{.items[0].spec.version}'
+    # Then check the operator release notes for the matching MOFED image tag.
+    version: doca3.4.0-26.04-0.8.5.0
+    env:
+      - name: UNLOAD_STORAGE_MODULES
+        value: "true"
+      - name: UNLOAD_THIRD_PARTY_RDMA_MODULES
+        value: "true"
+    startupProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 20
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+    readinessProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    upgradePolicy:
+      autoUpgrade: true
+      maxParallelUpgrades: 1
+      safeLoad: false
+      drain:
+        deleteEmptyDir: true
+        enable: true
+        force: true
+        podSelector: ""
+        timeoutSeconds: 300
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              # Schedule MOFED driver pods only on nodes with Mellanox NICs.
+              # NFD applies this label automatically when it detects vendor 15b3.
+              - key: feature.node.kubernetes.io/pci-15b3.present
+                operator: Exists
+  rdmaSharedDevicePlugin:
+    image: k8s-rdma-shared-dev-plugin
+    repository: nvcr.io/nvidia/cloud-native
+    version: v1.5.2
+    config: |
+      {
+        "configList": [
+          {
+            "resourceName": "ib",
+            "resourcePrefix": "rdma",
+            "rdmaHcaMax": 63,
+            "selectors": {
+              "vendors": ["15b3"],
+              "deviceIDs": ["101b"]
+            }
+          }
+        ]
+      }

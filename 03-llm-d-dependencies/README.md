@@ -9,10 +9,11 @@ Install the operators and platform dependencies required for llm-d deployment.
 The required operators differ by platform. Operator installation is documented in external guides — refer to the appropriate guide for your platform below.
 
 ## Platform Guides
+# TODO: Update dependencies based on https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/installing_and_uninstalling_openshift_ai_self-managed/installing-and-deploying-openshift-ai_install#requirements-for-openshift-ai-self-managed_install
 
 | Platform | Guide |
 |----------|-------|
-| OpenShift Container Platform | [llm-d-playbook](https://github.com/llm-d/llm-d-playbook) |
+| OpenShift Container Platform | [Red Hat OpenShift AI installation for Distributed Inference with llm-d](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/installing_and_uninstalling_openshift_ai_self-managed/installing-and-deploying-openshift-ai_install#requirements-for-openshift-ai-self-managed_install) |
 | Managed Kubernetes (AKS / CKS) | [Deploying Red Hat AI Inference Server on Managed Kubernetes](https://opendatahub-io.github.io/rhaii-on-xks/deploying-llm-d-on-managed-kubernetes/) |
 
 ## Component Comparison
@@ -31,3 +32,4 @@ The table below shows which components are installed per platform. The component
 ## Next Steps
 
 Once these llm-d dependencies are installed proceed to [Chapter 04: Validate llm-d Dependencies](../04-validate-llm-d-dependencies/) to confirm they are healthy.
+
