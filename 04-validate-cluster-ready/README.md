@@ -74,7 +74,7 @@ RDMA validation uses GPU-NIC NUMA topology to pair devices correctly and runs ba
 
 ### Prerequisites
 
-- Cluster with RDMA networking configured — see [Chapter 03](../03-ocp-accelerator-operators/)
+- Cluster with RDMA networking configured — see [Chapter 03](../03-accelerator-operator-config/)
 - GPU operator running and validated — see [GPU Readiness](#gpu-readiness) above
 - `kubectl` or `oc` CLI authenticated to the cluster
 - Pull secret for `registry.redhat.io` (the validation images are hosted there)

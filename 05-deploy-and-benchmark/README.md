@@ -6,8 +6,8 @@ This chapter covers deploying llm-d and measuring its performance. Each deployme
 
 - Cluster with GPU nodes available
 - llm-d dependencies installed ([Chapter 02](../02-llm-d-dependencies/))
-- GPU operator running and validated ([Chapter 04](../04-validate-cluster/))
-- For P/D disaggregation: RDMA networking configured and validated ([Chapter 03](../03-ocp-accelerator-operators/), [Chapter 04](../04-validate-cluster/))
+- GPU operator running and validated ([Chapter 04](../04-validate-cluster-ready/))
+- For P/D disaggregation: RDMA networking configured and validated ([Chapter 03](../03-accelerator-operator-config/), [Chapter 04](../04-validate-cluster-ready/))
 
 ## Deployment Modes
 

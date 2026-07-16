@@ -381,12 +381,12 @@ if [ "$IS_VM" = true ] && [ "$HAS_GPU" = true ]; then
   echo ""
   echo "  Your cluster is running on virtual machines with GPU passthrough."
   echo "  SR-IOV operator is not applicable; use host-device CNI for RDMA NICs."
-  echo "  Use: ./03-ocp-accelerator-operators/install.sh --platform ibm-cloud"
+  echo "  Use: ./03-accelerator-operator-config/install.sh --platform ibm-cloud"
 elif [ "$HAS_IB" = true ] && [ "$HAS_ROCE" = false ]; then
   echo "  -> bare-metal-ib"
   echo ""
   echo "  Your cluster has InfiniBand NICs on physical functions."
-  echo "  Use: ./03-ocp-accelerator-operators/install.sh --platform bare-metal-ib"
+  echo "  Use: ./03-accelerator-operator-config/install.sh --platform bare-metal-ib"
 elif [ "$HAS_IB" = true ] && [ "$HAS_ROCE" = true ]; then
   if [ "$COUNT_ROCE" -gt "$COUNT_IB" ]; then
     echo "  -> bare-metal-roce  (likely — see note below)"
@@ -409,12 +409,12 @@ elif [ "$HAS_ROCE" = true ]; then
   echo "  -> bare-metal-roce"
   echo ""
   echo "  Your cluster has RoCE NICs on physical functions."
-  echo "  Use: ./03-ocp-accelerator-operators/install.sh --platform bare-metal-roce"
+  echo "  Use: ./03-accelerator-operator-config/install.sh --platform bare-metal-roce"
 elif [ "$HAS_GPU" = true ]; then
   echo "  -> ibm-cloud (or similar cloud environment)"
   echo ""
   echo "  Your cluster has GPUs but no RDMA NICs detected."
-  echo "  Use: ./03-ocp-accelerator-operators/install.sh --platform ibm-cloud"
+  echo "  Use: ./03-accelerator-operator-config/install.sh --platform ibm-cloud"
 else
   echo "  -> No GPU or RDMA hardware detected."
 fi

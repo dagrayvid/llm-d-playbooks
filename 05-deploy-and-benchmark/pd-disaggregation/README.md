@@ -20,12 +20,12 @@ P/D disaggregation separates these phases onto different pod groups, each tuned 
 | **Optimized for** | Memory bandwidth       | Compute throughput                    |
 
 
-After a prefill pod processes a prompt, it transfers the KV cache to a decode pod via **NIXL** (NVIDIA Inference eXchange Layer) over **RDMA**, avoiding a CPU-mediated copy. This requires RDMA networking — see [Chapter 04](../../04-validate-cluster/).
+After a prefill pod processes a prompt, it transfers the KV cache to a decode pod via **NIXL** (NVIDIA Inference eXchange Layer) over **RDMA**, avoiding a CPU-mediated copy. This requires RDMA networking — see [Chapter 04](../../04-validate-cluster-ready/).
 
 ## Prerequisites
 
-- Cluster with RDMA networking configured and validated — see [Chapter 03](../../03-ocp-accelerator-operators/) and [Chapter 04](../../04-validate-cluster/)
-- GPU operator running — see [Chapter 04](../../04-validate-cluster/)
+- Cluster with RDMA networking configured and validated — see [Chapter 03](../../03-accelerator-operator-config/) and [Chapter 04](../../04-validate-cluster-ready/)
+- GPU operator running — see [Chapter 04](../../04-validate-cluster-ready/)
 - Image pull secret `rhai-pull-secret` for Red Hat AI container images
 - `oc` CLI authenticated to the cluster (on non-OCP platforms, `kubectl` can be used in place of `oc` throughout this guide)
 - **(OCP)** P/D pods require `IPC_LOCK` for RDMA memory registration, which is not permitted by the default restricted SCC. The operator creates a service account `<name>-kserve` for decode pods; prefill pods use the `default` SA. Grant both the `openshift-ai-llminferenceservice-scc`:
@@ -337,11 +337,15 @@ spec:
           limits:
             nvidia.com/gpu: '2'
             rdma/ib: '1'
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
 ```
 
 - **2 replicas with TP=2** — decode is memory-bandwidth-bound; separating decode from prefill lets these pods focus on token generation
 - `rdma/ib: '1'` — requests one RDMA device for KV cache transfers (resource name varies by platform — see [Manifest Structure](#manifest-structure))
-- `IPC_LOCK` **capability** — required for RDMA memory registration (pinned memory)
+- `IPC_LOCK` — set via `securityContext.capabilities.add` in the container spec; required for RDMA memory registration (pinned memory)
 
 
 
