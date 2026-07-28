@@ -1,0 +1,22 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-b200-gpu-crio-memlock
+  labels:
+    # Change this to match your GPU worker MachineConfigPool name
+    machineconfiguration.openshift.io/role: b200-gpu
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+        - path: /etc/crio/crio.conf.d/99-memlock.conf
+          mode: 0644
+          overwrite: true
+          contents:
+            inline: |
+              [crio.runtime]
+              default_ulimits = [
+                "memlock=-1:-1"
+              ]

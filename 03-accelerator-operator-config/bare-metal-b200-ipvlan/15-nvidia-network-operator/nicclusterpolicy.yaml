@@ -1,0 +1,34 @@
+apiVersion: mellanox.com/v1alpha1
+kind: NicClusterPolicy
+metadata:
+  name: nic-cluster-policy
+spec:
+  ofedDriver:
+    image: doca-driver
+    repository: nvcr.io/nvidia/mellanox
+    # MOFED driver version — must match your NVIDIA Network Operator version.
+    # Check: oc get csv -n nvidia-network-operator
+    version: doca3.4.0-26.04-0.8.6.0-0
+    upgradePolicy:
+      autoUpgrade: true
+      drain:
+        deleteEmptyDir: true
+        enable: true
+        force: true
+        timeoutSeconds: 300
+      maxParallelUpgrades: 1
+    env:
+    - name: UNLOAD_STORAGE_MODULES
+      value: "true"
+  rdmaSharedDevicePlugin:
+    image: k8s-rdma-shared-dev-plugin
+    repository: nvcr.io/nvidia/mellanox
+    version: network-operator-v26.1.0
+    # Selects all Mellanox NICs (vendor 15b3). Pods request rdma/rdma_shared_device_a
+    # to get access to all RDMA devices on the node.
+    # Change deviceIDs if your NICs use a different model:
+    #   1017 = ConnectX-5 Ex, 101b = ConnectX-6, 101e = ConnectX-6 Dx,
+    #   1021 = ConnectX-7, a2dc = BlueField-3
+    config: >-
+      {"configList": [{"resourceName": "rdma_shared_device_a",
+      "rdmaHcaMax": 1000, "selectors": {"vendors": ["15b3"]}}]}

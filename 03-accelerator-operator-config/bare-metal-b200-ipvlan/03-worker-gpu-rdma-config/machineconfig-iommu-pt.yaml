@@ -1,0 +1,10 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-b200-gpu-iommu-pt
+  labels:
+    # Change this to match your GPU worker MachineConfigPool name
+    machineconfiguration.openshift.io/role: b200-gpu
+spec:
+  kernelArguments:
+    - iommu=pt
