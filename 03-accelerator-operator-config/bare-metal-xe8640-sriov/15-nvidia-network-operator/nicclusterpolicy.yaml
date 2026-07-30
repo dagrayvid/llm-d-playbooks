@@ -1,0 +1,70 @@
+apiVersion: mellanox.com/v1alpha1
+kind: NicClusterPolicy
+metadata:
+  name: nic-cluster-policy
+spec:
+  ofedDriver:
+    image: doca-driver
+    repository: nvcr.io/nvidia/mellanox
+    # MOFED driver version — must match your NVIDIA Network Operator version.
+    # Find the correct version: oc get csv -n nvidia-network-operator -o jsonpath='{.items[0].metadata.annotations.alm-examples}' | python3 -c "import sys,json; [print(e['spec']['ofedDriver']['version']) for e in json.load(sys.stdin) if e['kind']=='NicClusterPolicy']"
+    version: doca3.4.1-26.04-1.1.0.0-1
+    env:
+    - name: UNLOAD_STORAGE_MODULES
+      value: "true"
+    # Required on nodes with Intel i40e/ice NICs (Dell XE8640, R750, etc.).
+    # The Intel irdma driver grabs ib_uverbs and prevents MOFED from loading.
+    - name: UNLOAD_THIRD_PARTY_RDMA_MODULES
+      value: "true"
+    startupProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 20
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+    readinessProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    terminationGracePeriodSeconds: 300
+    upgradePolicy:
+      autoUpgrade: true
+      drain:
+        enable: true
+        force: true
+        deleteEmptyDir: true
+        timeoutSeconds: 300
+        podSelector: ''
+      maxParallelUpgrades: 1
+      safeLoad: false
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/pci-15b3.present
+                operator: Exists
+              # Only target GPU worker nodes — prevents MOFED from draining/rebooting
+              # non-GPU nodes (e.g. control plane) that happen to have Mellanox NICs.
+              - key: node-role.kubernetes.io/gpu-worker
+                operator: Exists
+  rdmaSharedDevicePlugin:
+    image: k8s-rdma-shared-dev-plugin
+    repository: nvcr.io/nvidia/mellanox
+    version: network-operator-v26.1.0
+    config: |
+      {
+        "configList": [
+          {
+            "resourcePrefix": "nvidia.com",
+            "resourceName": "roce",
+            "rdmaHcaMax": 63,
+            "selectors": {
+              "vendors": ["15b3"],
+              "deviceIDs": ["101d"]
+            }
+          }
+        ]
+      }

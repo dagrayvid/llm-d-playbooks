@@ -1,0 +1,10 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-gpu-worker-iommu-pt
+  labels:
+    machineconfiguration.openshift.io/role: gpu-worker
+spec:
+  kernelArguments:
+    # iommu=pt: IOMMU passthrough mode — required for GPUDirect RDMA on bare-metal.
+    - iommu=pt

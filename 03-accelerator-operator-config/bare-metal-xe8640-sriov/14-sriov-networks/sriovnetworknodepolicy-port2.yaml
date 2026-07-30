@@ -1,0 +1,20 @@
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovNetworkNodePolicy
+metadata:
+  name: policy-roce-port2
+  namespace: openshift-sriov-network-operator
+spec:
+  deviceType: netdevice
+  isRdma: true
+  mtu: 9000
+  nicSelector:
+    # Change pfNames to match your NIC interface name for port 2.
+    pfNames:
+      - eno12409np1
+    vendor: "15b3"
+  nodeSelector:
+    # Change to match your GPU worker node role label
+    node-role.kubernetes.io/gpu-worker: ""
+  numVfs: 8
+  priority: 89
+  resourceName: sriov_vf_port2

@@ -1,0 +1,18 @@
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovNetwork
+metadata:
+  name: sriov-roce-port2
+  namespace: openshift-sriov-network-operator
+spec:
+  # Change networkNamespace to the namespace where your workload pods run.
+  networkNamespace: openshift-multus
+  resourceName: sriov_vf_port2
+  # VLAN 103 — both ports share the same VLAN and subnet.
+  vlan: 103
+  ipam: |
+    {
+      "type": "whereabouts",
+      "range": "192.168.103.0/24",
+      "range_start": "192.168.103.10",
+      "range_end": "192.168.103.250"
+    }
