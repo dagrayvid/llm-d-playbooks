@@ -10,16 +10,12 @@ spec:
   router:
     scheduler:
       template:
-        imagePullSecrets:
-        - name: rhai-pull-secret
         containers:
         - name: main
         - name: tokenizer
     route: {}
     gateway: {}
   template:
-    imagePullSecrets:
-    - name: rhai-pull-secret
     containers:
       - name: main
         resources:

@@ -45,7 +45,7 @@ spec:
           {
             "resourcePrefix": "nvidia.com",
             "resourceName": "roce",
-            "rdmaHcaMax": 8,
+            "rdmaHcaMax": 63,
             "selectors": {
               "vendors": ["15b3"],
               "deviceIDs": ["101e"],

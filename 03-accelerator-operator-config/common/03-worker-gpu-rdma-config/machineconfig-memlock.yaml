@@ -3,7 +3,9 @@ kind: MachineConfig
 metadata:
   name: 99-gpu-worker-crio-memlock
   labels:
-    machineconfiguration.openshift.io/role: gpu-worker
+    # Change this to match your GPU worker MachineConfigPool name.
+    # If your GPU nodes use the default "worker" pool, leave as-is.
+    machineconfiguration.openshift.io/role: worker
 spec:
   config:
     ignition:
@@ -14,4 +16,7 @@ spec:
           mode: 0644
           overwrite: true
           contents:
+            # Sets CRI-O default memlock ulimit to unlimited (-1:-1).
+            # Required for RDMA memory registration — ibv_reg_mr() pins memory
+            # and fails with ENOMEM if memlock is capped.
             source: data:text/plain;charset=utf-8;base64,W2NyaW8ucnVudGltZV0KZGVmYXVsdF91bGltaXRzID0gWwogICAgIm1lbWxvY2s9LTE6LTEiCl0K

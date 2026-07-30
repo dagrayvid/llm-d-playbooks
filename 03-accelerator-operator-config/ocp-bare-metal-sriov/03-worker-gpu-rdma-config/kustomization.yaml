@@ -3,4 +3,13 @@ kind: Kustomization
 resources:
   - machineconfigpool.yaml
   - machineconfig-iommu-pt.yaml
-  - machineconfig-memlock.yaml
+  - ../../common/03-worker-gpu-rdma-config
+
+patches:
+  - target:
+      kind: MachineConfig
+      name: 99-gpu-worker-crio-memlock
+    patch: |
+      - op: replace
+        path: /metadata/labels/machineconfiguration.openshift.io~1role
+        value: gpu-worker

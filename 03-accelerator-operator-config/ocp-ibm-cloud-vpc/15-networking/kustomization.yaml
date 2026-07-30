@@ -1,7 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
-  - machineconfig-memlock.yaml
+  - ../../common/03-worker-gpu-rdma-config
   - sbr-custom-daemonset.yaml
   - network-attachment-definitions.yaml
+
+patches:
+  - target:
+      kind: MachineConfig
+      name: 99-gpu-worker-crio-memlock
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: 100-gpu-h100-crio-memlock
+      - op: replace
+        path: /metadata/labels/machineconfiguration.openshift.io~1role
+        value: gpu-h100

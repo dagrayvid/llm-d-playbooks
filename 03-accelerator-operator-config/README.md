@@ -15,7 +15,7 @@ Each case study is a self-contained directory with its own README, step-by-step 
 | [`ocp-bare-metal-infiniband/`](ocp-bare-metal-infiniband/) | Bare-metal, 4 nodes, 8x A100 per node | ConnectX-6 PFs (InfiniBand HDR) | InfiniBand | RDMA shared device plugin |
 | [`ocp-bare-metal-ipvlan/`](ocp-bare-metal-ipvlan/) | Bare-metal, 2 nodes, 8x B200 per node | BF3 SuperNICs (legacy NIC mode) | RoCE v2 | ipvlan L2 + RDMA shared device plugin |
 | [`ocp-bare-metal-sriov/`](ocp-bare-metal-sriov/) | Bare-metal, 2 nodes, 4x H100 per node | ConnectX-6 Dx dual-port | RoCE v2 | SR-IOV + whereabouts IPAM |
-| [`ocp-ibm-cloud-vpc/`](ocp-ibm-cloud-vpc/) | IBM Cloud VPC, H100/H200 bare-metal workers | ConnectX-6 Dx VFs (hypervisor-managed) | RoCE v2 | host-device + custom SBR |
+| [`ocp-ibm-cloud-vpc/`](ocp-ibm-cloud-vpc/) | IBM Cloud VPC, H100/H200 bare-metal workers | ConnectX-7 VFs (hypervisor-managed) | RoCE v2 | host-device + custom SBR |
 
 ## Shared Components (`common/`)
 

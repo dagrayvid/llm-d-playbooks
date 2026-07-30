@@ -2,48 +2,28 @@
 
 ## Environment
 
-- **Platform**: Bare-metal OpenShift 4.22 (OCP, Kubernetes v1.35)
-- **GPU nodes**: 4x A100 workers (`a100-01`, `a100-02`, `a100-03`, `a100-08`), labeled `node-role.kubernetes.io/a100-gpu`
-- **Control plane**: 3 masters (`master0`, `master1`, `master2`) — no GPUs, not part of RDMA fabric
+- **Platform**: Bare-metal OpenShift 4.22
+- **GPU nodes**: 4 workers, labeled `node-role.kubernetes.io/a100-gpu`
 - **GPUs per node**: 8x NVIDIA A100 SXM4
 - **NICs per node**: 8x Mellanox ConnectX-6 (MT28908 / MT4123), InfiniBand HDR (200 Gbps per port)
-- **NIC firmware**: 20.40.1000 (all 8 HCAs, all nodes)
 - **CPUs per node**: 2 sockets, 2 NUMA nodes
-- **RDMA Transport**: InfiniBand (not RoCE)
-- **Subnet Manager**: Switch-managed (SM lid 45 — single fabric)
+- **RDMA Transport**: InfiniBand
+- **Subnet Manager**: Switch-managed (single fabric)
 - **CNI Strategy**: RDMA shared device plugin on PFs (no SR-IOV, no macvlan, no SBR)
 
 ## Key Characteristics
 
-- **InfiniBand is simpler than RoCE** — built-in credit-based flow control eliminates the need for PFC/ECN tuning, NMState/NNCP for MTU, macvlan NADs, source-based routing, and SR-IOV VF configuration. This case study has 7 steps compared to 16+ for the RoCE equivalent.
 - NICs are **physical functions** (PFs) directly visible to the OS
 - Uses **RDMA shared device plugin** directly on PFs — no VFs, no macvlan, no SBR
 - The IB **subnet manager runs on the switch** — no need for a host-side SM
-- **IPoIB interface naming** (`ibpXsY`) is already consistent across nodes — no udev rules needed
-- **IOMMU passthrough** and **ACS disable** are still mandatory for GPUDirect RDMA (same as RoCE)
-- **memlock unlimited** is still required for RDMA memory registration
-- All 8 HCAs on each node connect to the **same IB fabric** (verified by identical SM lid 45 across all ports)
+- All 8 HCAs on each node connect to the **same IB fabric** (single SM lid)
 - Uses a **custom MachineConfigPool** (`a100-gpu`) to target GPU workers without rebooting control-plane nodes
-
-## What's NOT Needed (vs. RoCE)
-
-| RoCE requirement | Why it doesn't apply to IB |
-|------------------|---------------------------|
-| PFC/ECN/QoS tuning | IB has built-in lossless credit-based flow control |
-| macvlan + SBR | IB uses the switch-managed subnet manager for routing |
-| NMState/NNCP for MTU | IB MTU is set at the subnet manager level (typically 4K) |
-| SR-IOV VFs | Using RDMA shared device plugin directly on PFs |
-| NIC discovery jobs | Static topology — no dynamic NAD generation needed |
-| IB interface normalization / udev rules | IPoIB names (`ibpXsY`) are already consistent across nodes |
-| NicConfigurationTemplate | No firmware-level RoCE QoS settings to apply |
 
 ## Network Topology
 
 ### IB Fabric
 
-All 32 HCAs (8 per node × 4 nodes) connect to a single IB fabric with one switch-managed subnet manager (SM lid 45). The fabric provides HDR speeds (200 Gbps per port).
-
-IPoIB interfaces use kernel-assigned names in the format `ibpXsY`, where X is derived from the PCI bus number. These names are consistent across nodes because all nodes have identical hardware and PCI topology.
+All 32 HCAs (8 per node × 4 nodes) connect to a single IB fabric with one switch-managed subnet manager. IPoIB interfaces use kernel-assigned names in the format `ibpXsY`, consistent across nodes with identical PCI topology.
 
 ### GPU-NIC PCIe Topology
 
@@ -86,50 +66,6 @@ NUMA 1
 
 Note: mlx5 device numbering is not sequential with PCIe order — `mlx5_0`/`mlx5_1` are on the second switch of NUMA 0, not the first.
 
-### IB Port Status
-
-All 8 HCAs on each node report identical status (verified via `ibstat`):
-
-| Field | Value |
-|-------|-------|
-| CA type | MT4123 (ConnectX-6) |
-| Firmware | 20.40.1000 |
-| State | Active |
-| Physical state | LinkUp |
-| Rate | 200 (HDR) |
-| Link layer | InfiniBand |
-| SM lid | 45 |
-
-### Future Multi-Fabric Expansion
-
-There may later be additional nodes on a **separate IB fabric**. Use **node labels and pod affinity** to isolate fabrics — not per-fabric resource names in the RDMA shared device plugin.
-
-The device plugin's `configList` has no `nodeSelector` field, so the only way to create per-fabric resource names would be selectors like `ifNames` or `deviceIDs`. These are fragile: `ifNames` (`ibpXsY`) derive from PCI bus numbers and will collide if two node groups share the same PCI topology (common with identical server models). `deviceIDs` collide if both fabrics use the same NIC model.
-
-Instead, keep a single resource name (`rdma/ib`) and label nodes by fabric:
-
-```bash
-oc label node <fabric-a-node> network.example.com/ib-fabric=a
-oc label node <fabric-b-node> network.example.com/ib-fabric=b
-```
-
-Pods select their fabric via node affinity:
-
-```yaml
-resources:
-  limits:
-    rdma/ib: 1
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: network.example.com/ib-fabric
-              operator: In
-              values: ["a"]
-```
-
-This uses standard Kubernetes scheduling and works with any number of fabrics without modifying the NicClusterPolicy.
 
 ## Prerequisites
 
@@ -142,7 +78,7 @@ This uses standard Kubernetes scheduling and works with any number of fabrics wi
 
 ## Steps
 
-Apply each step in order. Steps are numbered to match the [B200/RoCE case study](../bare-metal-dell-b200-bf3/) for cross-reference; gaps are intentional — skipped steps (04, 10, 11, 12, 13, 14, 16) don't apply to InfiniBand.
+Apply each step in order. Steps are numbered to match other case studies for cross-reference; gaps are intentional where steps don't apply to this environment.
 
 ### Step 00: Discover GPUs & NICs
 
@@ -316,8 +252,6 @@ Deploys the `NicClusterPolicy` with:
 - **MOFED drivers** — containerized Mellanox OFED drivers for InfiniBand
 - **RDMA shared device plugin** — exposes IB HCAs as Kubernetes extended resources (`rdma/ib`)
 
-No NicConfigurationTemplate is needed for IB — unlike RoCE, there are no PFC/ECN/QoS firmware settings to apply.
-
 The device plugin selects HCAs by vendor (`15b3`) and device ID (`101b` for ConnectX-6). Change the `deviceIDs` selector if your NICs are a different model (e.g., `1017` for ConnectX-5 Ex, `1021` for ConnectX-7).
 
 **Before applying**, verify the MOFED driver version in `nicclusterpolicy.yaml` matches your NVIDIA Network Operator version:
@@ -418,3 +352,31 @@ For InfiniBand, RDMA validation tests use IB verbs directly (e.g., `ib_write_bw`
 ## Problems Encountered and Solutions
 
 > **TODO**: Document issues encountered during bring-up.
+
+## Appendix: Validated Hardware Details
+
+Reference data from the cluster used to develop this case study.
+
+### IB Port Status
+
+All 8 HCAs on each node report identical status (verified via `ibstat`):
+
+| Field | Value |
+|-------|-------|
+| CA type | MT4123 (ConnectX-6) |
+| Firmware | 20.40.1000 |
+| State | Active |
+| Physical state | LinkUp |
+| Rate | 200 (HDR) |
+| Link layer | InfiniBand |
+| SM lid | 45 |
+
+### Node Inventory
+
+| Node | Role | GPUs | HCAs |
+|------|------|------|------|
+| `a100-01` | GPU worker | 8x A100 SXM4 | 8x ConnectX-6 (MT28908) |
+| `a100-02` | GPU worker | 8x A100 SXM4 | 8x ConnectX-6 (MT28908) |
+| `a100-03` | GPU worker | 8x A100 SXM4 | 8x ConnectX-6 (MT28908) |
+| `a100-08` | GPU worker | 8x A100 SXM4 | 8x ConnectX-6 (MT28908) |
+| `master0`–`master2` | Control plane | — | — |

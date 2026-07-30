@@ -4,7 +4,7 @@
 
 - **Platform**: IBM Cloud VPC bare-metal workers (`gx3d-160x1792x8h100` or `gx3d-160x1792x8h200`)
 - **GPUs**: 8x NVIDIA H100 or H200 per node
-- **NICs**: 8x ConnectX-6 Dx VFs (`101e`) per node, presented by the IBM Cloud hypervisor
+- **NICs**: 8x ConnectX-7 VFs (`101e`) per node, presented by the IBM Cloud hypervisor
 - **Network**: Hopper-1 cluster network with 8 subnets (one per NIC), each in the `10.x.0.0/16` range
 - **RDMA Transport**: RoCE v2
 - **CNI Strategy**: `host-device` (full NIC passthrough to pod) + source-based routing
@@ -17,7 +17,7 @@
 - **PFC/ECN/QoS tuning is not needed** — handled by the IBM Cloud fabric
 - **IOMMU is not needed** — the hypervisor handles IOMMU for the guest VMs
 - **Source-based routing is critical** — each NIC is on a different subnet; without SBR, cross-subnet traffic uses the wrong egress NIC and is dropped by the IBM Cloud fabric (anti-spoofing)
-- Uses a **custom SBR CNI binary** (`sbr-custom`) because stock SBR requires gateway from IPAM, but IBM Cloud DHCP does not provide a gateway
+- Uses a **custom SBR CNI binary** (`sbr-custom`) that deploys the latest upstream SBR with additions for statically setting the gateway via config ([containernetworking/plugins#1217](https://github.com/containernetworking/plugins/pull/1217)). Stock SBR requires gateway from IPAM, but IBM Cloud DHCP does not provide one
 
 ## Network Topology
 
@@ -35,11 +35,9 @@ Before deploying OCP operators, the high-speed RDMA network must be configured a
 
 1. **Create a cluster network** — in your IBM Cloud VPC, create a cluster network (Hopper-1 type) with 8 subnets. Each subnet provides a dedicated RDMA fabric rail.
 2. **Attach cluster network interfaces** — for each bare-metal instance, create 8 cluster network interface attachments (one per subnet). The instances must be **stopped** to attach cluster network interfaces. After attaching, start the instances.
-3. **Verify NICs appear in the guest OS** — after boot, each node should have 8 additional NICs (`enp163s0` through `enp233s0`) visible via `ip link`. These are the hypervisor-managed VFs for RDMA.
+3. **Verify NICs appear in the guest OS** — after boot, each node should have 8 additional NICs (`enp163s0` through `enp233s0`) visible via `oc debug node/<node-name> -- chroot /host ip link`. These are the hypervisor-managed VFs for RDMA.
 
 See the [IBM Cloud documentation on cluster networks](https://cloud.ibm.com/docs/vpc?topic=vpc-about-cluster-network) for detailed instructions.
-
-- Validated regions: Frankfurt (eu-de-2, eu-de-fra02-a), Washington DC (us-east-3)
 
 ## Steps
 
@@ -78,7 +76,7 @@ oc get nodes -l feature.node.kubernetes.io/pci-15b3.present=true
 
 ### Step 14: NVIDIA Network Operator
 
-Deploy `NicClusterPolicy` with MOFED drivers and the RDMA shared device plugin. The device plugin advertises the hypervisor-managed ConnectX-6 Dx VFs (`101e`) as `nvidia.com/roce` resources so pods can request them.
+Deploy `NicClusterPolicy` with MOFED drivers and the RDMA shared device plugin. The device plugin advertises the hypervisor-managed ConnectX-7 VFs (`101e`) as `nvidia.com/roce` resources so pods can request them.
 
 ```bash
 oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/14-nvidia-network-operator/
@@ -151,7 +149,7 @@ After all steps complete, proceed to [Chapter 04: Validate Cluster](../../04-val
 
 ## Known Gotchas
 
-1. **DHCP missing gateway** — IBM Cloud's DHCP does not provide a gateway in the lease. Stock SBR CNI fails because it expects gateway from the IPAM result. The `sbr-custom` binary in this case study adds `gateway` and `preserveDefaultRoutes` fields to work around this.
+1. **DHCP missing gateway** — IBM Cloud's DHCP does not provide a gateway in the lease. Stock SBR CNI fails because it expects gateway from the IPAM result. The `sbr-custom` binary uses `gateways` (an array of statically configured gateway IPs) and `addSourceHints` — see [containernetworking/plugins#1217](https://github.com/containernetworking/plugins/pull/1217).
 
 2. **MachineConfigPool name** — the memlock MachineConfig targets the `gpu-h100` MCP. If your MCP is named differently (e.g., `gpu-h200`, `worker`), update `15-networking/machineconfig-memlock.yaml`.
 

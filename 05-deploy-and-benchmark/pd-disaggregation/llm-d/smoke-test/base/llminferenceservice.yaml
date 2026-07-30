@@ -8,8 +8,6 @@ spec:
     uri: hf://Qwen/Qwen3-0.6B
   replicas: 1
   template:
-    imagePullSecrets:
-      - name: rhai-pull-secret
     containers:
       - name: main
         env:
@@ -35,10 +33,6 @@ spec:
             memory: 8Gi
             nvidia.com/gpu: '1'
             rdma/ib: '1'
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
         volumeMounts:
           - name: shm
             mountPath: /dev/shm
@@ -50,8 +44,6 @@ spec:
   prefill:
     replicas: 1
     template:
-      imagePullSecrets:
-        - name: rhai-pull-secret
       containers:
         - name: main
           env:
@@ -76,10 +68,6 @@ spec:
               memory: 8Gi
               nvidia.com/gpu: '1'
               rdma/ib: '1'
-          securityContext:
-            capabilities:
-              add:
-                - IPC_LOCK
           volumeMounts:
             - name: shm
               mountPath: /dev/shm

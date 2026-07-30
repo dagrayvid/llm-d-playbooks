@@ -3,4 +3,16 @@ kind: Kustomization
 resources:
   - machineconfig-iommu-pt.yaml
   - machineconfig-disable-acs.yaml
-  - machineconfig-memlock.yaml
+  - ../../common/03-worker-gpu-rdma-config
+
+patches:
+  - target:
+      kind: MachineConfig
+      name: 99-gpu-worker-crio-memlock
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: 99-a100-gpu-crio-memlock
+      - op: replace
+        path: /metadata/labels/machineconfiguration.openshift.io~1role
+        value: a100-gpu
