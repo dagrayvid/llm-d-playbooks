@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+
+patches:
+  # Add SR-IOV network annotation
+  - target:
+      kind: LLMInferenceService
+      name: pd-smoke-test
+    patch: |
+      - op: add
+        path: /metadata/annotations
+        value:
+          k8s.v1.cni.cncf.io/networks: openshift-multus/sriov-roce-port1
+
+  # Decode: swap rdma/ib for SR-IOV VF
+  - target:
+      kind: LLMInferenceService
+      name: pd-smoke-test
+    patch: |
+      - op: remove
+        path: /spec/template/containers/0/resources/limits/rdma~1ib
+      - op: remove
+        path: /spec/template/containers/0/resources/requests/rdma~1ib
+      - op: add
+        path: /spec/template/containers/0/resources/limits/openshift.io~1sriov_vf_port1
+        value: '1'
+      - op: add
+        path: /spec/template/containers/0/resources/requests/openshift.io~1sriov_vf_port1
+        value: '1'
+
+  # Prefill: swap rdma/ib for SR-IOV VF
+  - target:
+      kind: LLMInferenceService
+      name: pd-smoke-test
+    patch: |
+      - op: remove
+        path: /spec/prefill/template/containers/0/resources/limits/rdma~1ib
+      - op: remove
+        path: /spec/prefill/template/containers/0/resources/requests/rdma~1ib
+      - op: add
+        path: /spec/prefill/template/containers/0/resources/limits/openshift.io~1sriov_vf_port1
+        value: '1'
+      - op: add
+        path: /spec/prefill/template/containers/0/resources/requests/openshift.io~1sriov_vf_port1
+        value: '1'
