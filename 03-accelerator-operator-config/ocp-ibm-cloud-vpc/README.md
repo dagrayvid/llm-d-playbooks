@@ -50,7 +50,7 @@ Apply each step in order. Wait for operators to be ready before proceeding to th
 Install NFD, NVIDIA GPU Operator, and NVIDIA Network Operator.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/ibm-cloud-vpc/01-operator-subscriptions/
+oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/01-operator-subscriptions/
 ```
 
 Verify:
@@ -66,7 +66,7 @@ oc get csv -n nvidia-network-operator
 Deploy `NodeFeatureDiscovery` and `NodeFeatureRule` CRs to label nodes with GPU and NIC features.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/ibm-cloud-vpc/02-nfd-operands/
+oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/02-nfd-operands/
 ```
 
 Verify:
@@ -81,7 +81,7 @@ oc get nodes -l feature.node.kubernetes.io/pci-15b3.present=true
 Deploy `NicClusterPolicy` with MOFED drivers and the RDMA shared device plugin. The device plugin advertises the hypervisor-managed ConnectX-6 Dx VFs (`101e`) as `nvidia.com/roce` resources so pods can request them.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/ibm-cloud-vpc/14-nvidia-network-operator/
+oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/14-nvidia-network-operator/
 ```
 
 Verify:
@@ -106,7 +106,7 @@ Configures secondary high-speed networking:
 > **Warning: triggers GPU worker node reboot.** The memlock MachineConfig changes CRI-O configuration. Only nodes in the `gpu-h100` MachineConfigPool are rebooted.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/ibm-cloud-vpc/15-networking/
+oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/15-networking/
 ```
 
 Verify:
@@ -122,7 +122,7 @@ oc get net-attach-def                                # 8 NADs created
 Wait for MOFED drivers to be fully loaded before deploying the GPU ClusterPolicy.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/ibm-cloud-vpc/20-gpu-readiness/
+oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/20-gpu-readiness/
 ```
 
 ```bash
@@ -134,7 +134,7 @@ oc logs job/wait-for-mofed-ready -n llm-d-setup -f
 Deploy the GPU Operator `ClusterPolicy` (drivers, device plugin, DCGM, nvidia-peermem, toolkit).
 
 ```bash
-oc apply -k 03-accelerator-operator-config/ibm-cloud-vpc/21-gpu-operands/
+oc apply -k 03-accelerator-operator-config/ocp-ibm-cloud-vpc/21-gpu-operands/
 ```
 
 Verify:

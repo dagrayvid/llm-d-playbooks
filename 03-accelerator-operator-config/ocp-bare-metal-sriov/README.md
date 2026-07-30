@@ -62,7 +62,7 @@ Wait for operators to be ready before proceeding. Note that Step 15 (NicClusterP
 Install NFD, NVIDIA GPU Operator, NVIDIA Network Operator, and the SR-IOV Network Operator.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/01-operator-subscriptions/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/01-operator-subscriptions/
 ```
 
 Verify:
@@ -79,7 +79,7 @@ oc get csv -n openshift-sriov-network-operator
 Deploy `NodeFeatureDiscovery` and `NodeFeatureRule` CRs to label nodes with GPU and NIC features.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/02-nfd-operands/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/02-nfd-operands/
 ```
 
 Verify:
@@ -108,7 +108,7 @@ Creates a custom `gpu-worker` MachineConfigPool and applies MachineConfigs for:
 > **Warning: triggers GPU worker node reboots.** The `iommu=pt` MachineConfig changes kernel boot arguments. Only nodes in the `gpu-worker` MachineConfigPool are rebooted.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/03-worker-gpu-rdma-config/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/03-worker-gpu-rdma-config/
 ```
 
 Verify:
@@ -124,7 +124,7 @@ Configure the SR-IOV operator to run its config daemon on nodes with Mellanox SR
 > **Apply after** the SR-IOV operator CSV is ready (`oc get csv -n openshift-sriov-network-operator`).
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/10-sriov-operator-config/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/10-sriov-operator-config/
 ```
 
 Verify:
@@ -152,7 +152,7 @@ The NicClusterPolicy sets `UNLOAD_THIRD_PARTY_RDMA_MODULES=true`, which tells MO
 > **Apply before Step 14.** The SR-IOV config daemon waits for the `network.nvidia.com/operator.mofed.wait=false` node label, which is set when MOFED loads successfully. Step 14 (VF policies) requires the SR-IOV config daemon to be running.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/15-nvidia-network-operator/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/15-nvidia-network-operator/
 ```
 
 Verify:
@@ -186,7 +186,7 @@ The `SriovNetwork` resources automatically create `NetworkAttachmentDefinition` 
 > **Warning: triggers node drain and reboot.** Applying `SriovNetworkNodePolicy` creates VFs, which requires a node reboot.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/14-sriov-networks/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/14-sriov-networks/
 ```
 
 Verify:
@@ -202,7 +202,7 @@ oc get node <worker> -o jsonpath='{.status.allocatable}' | jq .            # sri
 Wait for MOFED drivers to be fully loaded before deploying the GPU ClusterPolicy.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/20-gpu-readiness/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/20-gpu-readiness/
 ```
 
 ```bash
@@ -214,7 +214,7 @@ oc logs job/wait-for-mofed-ready -n llm-d-setup -f
 Deploy the GPU Operator `ClusterPolicy` (drivers, device plugin, DCGM, nvidia-peermem, toolkit).
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-xe8640-sriov/21-gpu-operands/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-sriov/21-gpu-operands/
 ```
 
 Verify:

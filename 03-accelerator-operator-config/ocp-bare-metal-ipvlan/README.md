@@ -98,7 +98,7 @@ Run the hardware probe to identify NIC types, GPU models, and NUMA topology.
 Install NFD, NVIDIA GPU Operator, and NVIDIA Network Operator.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/01-operator-subscriptions/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/01-operator-subscriptions/
 ```
 
 Wait for all three operators to reach `Succeeded`:
@@ -114,7 +114,7 @@ oc get csv -n nvidia-network-operator -w
 Create the NodeFeatureDiscovery instance and NodeFeatureRules for GPU and NIC detection.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/02-nfd-operands/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/02-nfd-operands/
 ```
 
 Verify NFD labels are applied to GPU nodes:
@@ -136,7 +136,7 @@ This step applies two MachineConfigs:
 2. **`99-b200-gpu-crio-memlock`** — CRI-O memlock unlimited (required for RDMA memory registration)
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/03-worker-gpu-rdma-config/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/03-worker-gpu-rdma-config/
 ```
 
 Watch the rollout:
@@ -162,7 +162,7 @@ Deploys the `NicClusterPolicy` with:
 - **RDMA shared device plugin** — exposes all Mellanox RDMA devices as `rdma/rdma_shared_device_a`
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/15-nvidia-network-operator/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/15-nvidia-network-operator/
 ```
 
 Wait for MOFED driver pods on all GPU nodes:
@@ -190,7 +190,7 @@ Deploy 8 ipvlan L2 NetworkAttachmentDefinitions, one per rail (GPU-NIC pair).
 > - The NADs are namespaced — apply them in your workload namespace
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/16-ipvlan-networking/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/16-ipvlan-networking/
 ```
 
 Verify:
@@ -206,7 +206,7 @@ You should see 8 NADs: `ipvlan-rail0` through `ipvlan-rail7`.
 Wait for MOFED drivers to be ready before the GPU Operator starts loading its drivers.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/20-gpu-readiness/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/20-gpu-readiness/
 ```
 
 ### Step 21: GPU Operands
@@ -214,7 +214,7 @@ oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/20-gpu-readine
 Deploy the GPU Operator ClusterPolicy.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-b200-ipvlan/21-gpu-operands/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-ipvlan/21-gpu-operands/
 ```
 
 Wait for the ClusterPolicy to reach `ready` state:

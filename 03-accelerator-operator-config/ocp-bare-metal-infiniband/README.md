@@ -159,7 +159,7 @@ This outputs per-node JSON to `/tmp/gpu-nic-probe/` with GPU models, NIC PCI add
 Install NFD, NVIDIA GPU Operator, and NVIDIA Network Operator.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-a100-ib/01-operator-subscriptions/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-infiniband/01-operator-subscriptions/
 ```
 
 Wait for all three operators to reach `Succeeded`:
@@ -175,7 +175,7 @@ oc get csv -n nvidia-network-operator -w
 Create the NodeFeatureDiscovery instance and NodeFeatureRules for GPU and NIC detection.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-a100-ib/02-nfd-operands/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-infiniband/02-nfd-operands/
 ```
 
 Verify NFD labels are applied to GPU nodes:
@@ -236,7 +236,7 @@ oc patch mcp a100-gpu --type merge -p '{"spec":{"paused":true}}'
 Apply the MachineConfigs:
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-a100-ib/03-worker-gpu-rdma-config/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-infiniband/03-worker-gpu-rdma-config/
 ```
 
 Verify the MachineConfigs were created:
@@ -329,7 +329,7 @@ oc get csv -n nvidia-network-operator -o jsonpath='{.items[0].metadata.name}'
 If the operator version doesn't match the `ofedDriver.version` in the manifest, update the manifest before applying. Check the [NVIDIA Network Operator release notes](https://docs.nvidia.com/networking/display/kubernetes2610) for the correct MOFED image tag.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-a100-ib/15-nvidia-network-operator/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-infiniband/15-nvidia-network-operator/
 ```
 
 Wait for MOFED driver pods to come up on all GPU nodes:
@@ -365,7 +365,7 @@ Each GPU node should report `63` allocatable RDMA devices.
 Wait for MOFED drivers to be ready before the GPU Operator starts loading its drivers.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-a100-ib/20-gpu-readiness/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-infiniband/20-gpu-readiness/
 ```
 
 Monitor the readiness jobs:
@@ -380,7 +380,7 @@ oc logs job/wait-for-mofed-ready -n llm-d-setup -f
 Deploy the GPU Operator ClusterPolicy. This installs GPU drivers, device plugin, DCGM, GDRCopy, and other GPU operator components.
 
 ```bash
-oc apply -k 03-accelerator-operator-config/bare-metal-a100-ib/21-gpu-operands/
+oc apply -k 03-accelerator-operator-config/ocp-bare-metal-infiniband/21-gpu-operands/
 ```
 
 Wait for the ClusterPolicy to reach `ready` state:
